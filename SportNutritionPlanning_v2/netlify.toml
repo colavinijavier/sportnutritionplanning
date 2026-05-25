@@ -1,0 +1,21 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Legacy redirect: old family app URL → new authenticated app
+[[redirects]]
+  from = "/NutriPlan.html"
+  to = "/app.html"
+  status = 302
+
+# Pretty URLs
+[[redirects]]
+  from = "/signup"
+  to = "/login.html"
+  status = 302
+
+[[redirects]]
+  fr

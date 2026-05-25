@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5" />
+  <meta name="theme-color" content="#10b981" />
+  <title>SportNutritionPlanning — AI nutrition for athletes & families</title>
+  <meta name="description" content="Answer five questions and our AI builds a complete weekly meal plan, shopping list, and macro tracker tailored to your sport, your goals, and your family." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2310b981'/><text x='50' y='66' font-size='58' text-anchor='middle' fill='white' font-family='system-ui' font-weight='800'>S</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/css/theme.css" />
+  <meta property="og:title" content="SportNutritionPlanning — AI nutrition for athletes & families" />
+  <meta property="og:description" content="Build a personalised weekly meal plan in 5 minutes. For you or for the whole family." />
+  <meta property="og:type" content="website" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/">
+      <span class="brand-logo">S</span>
+      SportNutritionPlanning
+    </a>
+    <div class="nav-links" id="navLinks">
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#how" data-i18n="nav.howit">How it works</a>
+      <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
+      <a href="#faq" data-i18n="nav.faq">FAQ</a>
+      <div class="lang-toggle" aria-label="Language toggle">
+        <button data-lang="en">EN</button>
+        <button data-lang="es">ES</button>
+      </div>
+      <a href="/login.html" class="btn btn-ghost btn-sm" data-i18n="nav.login">Log in</a>
+      <a href="/onboarding.html" class="btn btn-primary btn-sm" data-i18n="nav.signup">Get started</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <span class="badge" data-i18n="hero.badge">AI-powered nutrition for athletes & families</span>
+    <h1 class="mt-4 mb-4" data-i18n="hero.title">Your weekly nutrition plan, tuned to your sport and your family.</h1>
+    <p class="lead" data-i18n="hero.lead">Answer five questions and our AI builds a complete weekly meal plan, shopping list, and macro tracker — for you alone or for your whole family.</p>
+    <div class="hero-cta">
+      <a href="/onboarding.html" class="btn btn-primary btn-lg" data-i18n="hero.cta_primary">Build my plan — free</a>
+      <a href="#how" class="btn btn-secondary btn-lg" data-i18n="hero.cta_secondary">How it works</a>
+    </div>
+    <div class="hero-meta">
+      <span class="hero-stars">★★★★★</span>
+      <span data-i18n="hero.meta">No credit card required · 24 nutrients tracked · Built for athletes & families</span>
+    </div>
+
+    <!-- Hero illustration: a sample weekly plan preview -->
+    <div class="mt-8" style="position:relative;">
+      <div class="card" style="max-width:920px;margin:48px auto 0;border-radius:24px;padding:0;overflow:hidden;border:1px solid var(--border);box-shadow:0 30px 80px rgba(15,23,42,.18);">
+        <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:white;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#fb7185;"></span>
+            <span style="width:10px;height:10px;border-radius:50%;background:#fbbf24;"></span>
+            <span style="width:10px;height:10px;border-radius:50%;background:#34d399;"></span>
+            <span style="margin-left:16px;font-size:13px;color:#94a3b8;">sportnutritionplanning.app / plan</span>
+          </div>
+          <span style="font-size:11px;background:rgba(16,185,129,.18);color:#6ee7b7;padding:4px 10px;border-radius:999px;font-weight:600;">LIVE PREVIEW</span>
+        </div>
+        <div style="display:grid;grid-template-columns:200px 1fr;min-height:420px;background:white;">
+          <div style="background:#f8fafc;padding:20px;border-right:1px solid var(--border);">
+            <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:#94a3b8;letter-spacing:.05em;margin-bottom:12px;">Week</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="padding:8px 12px;background:#10b981;color:white;border-radius:8px;font-size:13px;font-weight:600;">Monday · Training</div>
+              <div style="padding:8px 12px;font-size:13px;color:#475569;">Tuesday</div>
+              <div style="padding:8px 12px;font-size:13px;color:#475569;">Wednesday · Training</div>
+              <div style="padding:8px 12px;font-size:13px;color:#475569;">Thursday</div>
+              <div style="padding:8px 12px;font-size:13px;color:#475569;">Friday</div>
+              <div style="padding:8px 12px;font-size:13px;color:#475569;">Saturday · Training</div>
+              <div style="padding:8px 12px;font-size:13px;color:#475569;">Sunday</div>
+            </div>
+          </div>
+          <div style="padding:24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+              <div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:#94a3b8;letter-spacing:.05em;">Monday</div>
+                <div style="font-family:var(--font-display);font-size:22px;font-weight:700;color:var(--fg);">Training day plan</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:11px;color:#94a3b8;">DAILY TARGET</div>
+                <div style="font-size:14px;font-weight:700;color:var(--fg);">2,650 kcal · 165g protein</div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;">
+                <div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.05em;">07:30 · Breakfast</div>
+                <div style="font-size:14px;font-weight:600;color:var(--fg);margin-top:4px;">Oat bowl with banana & whey</div>
+                <div style="font-size:12px;color:#64748b;margin-top:6px;">580 kcal · 42P · 78C · 12F</div>
+                <div style="display:flex;gap:4px;margin-top:10px;">
+                  <span style="height:6px;flex:1;background:#10b981;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#f59e0b;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#ef4444;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#8b5cf6;border-radius:3px;"></span>
+                </div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;">
+                <div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.05em;">13:00 · Lunch</div>
+                <div style="font-size:14px;font-weight:600;color:var(--fg);margin-top:4px;">Grilled chicken, sweet potato, salad</div>
+                <div style="font-size:12px;color:#64748b;margin-top:6px;">720 kcal · 52P · 65C · 18F</div>
+                <div style="display:flex;gap:4px;margin-top:10px;">
+                  <span style="height:6px;flex:1;background:#10b981;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#f59e0b;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#ef4444;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#8b5cf6;border-radius:3px;"></span>
+                </div>
+              </div>
+              <div style="background:#ecfdf5;border:1px solid var(--emerald-300);border-radius:12px;padding:14px;">
+                <div style="font-size:11px;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:.05em;">17:30 · Pre-training</div>
+                <div style="font-size:14px;font-weight:600;color:var(--fg);margin-top:4px;">Banana + black coffee</div>
+                <div style="font-size:12px;color:#64748b;margin-top:6px;">140 kcal · 2P · 32C · 0F</div>
+                <div style="margin-top:8px;font-size:11px;color:#059669;font-weight:600;">⚡ Peri-workout</div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;">
+                <div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.05em;">20:30 · Dinner</div>
+                <div style="font-size:14px;font-weight:600;color:var(--fg);margin-top:4px;">Salmon, quinoa, roasted vegetables</div>
+                <div style="font-size:12px;color:#64748b;margin-top:6px;">680 kcal · 45P · 48C · 28F</div>
+                <div style="display:flex;gap:4px;margin-top:10px;">
+                  <span style="height:6px;flex:1;background:#10b981;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#f59e0b;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#ef4444;border-radius:3px;"></span>
+                  <span style="height:6px;flex:1;background:#8b5cf6;border-radius:3px;"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="text-center mb-8">
+      <h2 data-i18n="features.title">Everything you need to eat for performance</h2>
+      <p class="text-muted" style="max-width:60ch;margin:0 auto;font-size:17px;" data-i18n="features.subtitle">From a quick weekly menu to deep training-day periodization. Free covers the basics, Pro unlocks the deep stuff.</p>
+    </div>
+    <div class="grid grid-3">
+      <div class="feature">
+        <div class="feature-icon">🏃</div>
+        <h3 data-i18n="features.f1.title">Sport-first</h3>
+        <p data-i18n="features.f1.desc">Tell us your sport, training days and intensity. Your plan adapts the macros, the calories and the meal timing around your sessions.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">👨‍👩‍👧‍👦</div>
+        <h3 data-i18n="features.f2.title">Family-friendly</h3>
+        <p data-i18n="features.f2.desc">One plan for the whole house. Each member gets the right portion based on age, gender, weight and activity.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💬</div>
+        <h3 data-i18n="features.f3.title">AI you can talk to</h3>
+        <p data-i18n="features.f3.desc">Don't like a meal? Swap it. Need more protein on training days? Ask. Vegetarian on Wednesdays only? Done.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📊</div>
+        <h3 data-i18n="features.f4.title">24-nutrient tracker</h3>
+        <p data-i18n="features.f4.desc">Not just protein, carbs and fats — we track 24 micronutrients vs. official daily reference intakes.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🛒</div>
+        <h3 data-i18n="features.f5.title">Smart shopping list</h3>
+        <p data-i18n="features.f5.desc">A consolidated weekly cart, sorted by aisle, with quantities scaled to your family.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📅</div>
+        <h3 data-i18n="features.f6.title">Sync with your calendar</h3>
+        <p data-i18n="features.f6.desc">Pro: meals show up in Google or Apple Calendar — breakfast, lunch, dinner — so the whole house gets a reminder.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how" style="background:var(--bg-muted);">
+  <div class="container">
+    <div class="text-center mb-8">
+      <h2 data-i18n="how.title">Three steps. Five minutes.</h2>
+    </div>
+    <div class="grid grid-3">
+      <div class="card card-flat text-center" style="padding:32px 24px;">
+        <div style="font-size:64px;line-height:1;color:var(--emerald-500);font-family:var(--font-display);font-weight:800;letter-spacing:-.05em;">1</div>
+        <h3 class="mt-4" data-i18n="how.s1.title">1. Tell us about you</h3>
+        <p data-i18n="how.s1.desc">Age, sex, weight, sport, training schedule, food restrictions. Five short questions.</p>
+      </div>
+      <div class="card card-flat text-center" style="padding:32px 24px;">
+        <div style="font-size:64px;line-height:1;color:var(--emerald-500);font-family:var(--font-display);font-weight:800;letter-spacing:-.05em;">2</div>
+        <h3 class="mt-4" data-i18n="how.s2.title">2. AI builds your plan</h3>
+        <p data-i18n="how.s2.desc">Claude generates a balanced weekly menu, hits your macro targets, and respects your restrictions.</p>
+      </div>
+      <div class="card card-flat text-center" style="padding:32px 24px;">
+        <div style="font-size:64px;line-height:1;color:var(--emerald-500);font-family:var(--font-display);font-weight:800;letter-spacing:-.05em;">3</div>
+        <h3 class="mt-4" data-i18n="how.s3.title">3. Refine & cook</h3>
+        <p data-i18n="how.s3.desc">Swap any meal, scale the shopping list, sync to your calendar, and track adherence as you go.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="section" id="pricing">
+  <div class="container">
+    <div class="text-center mb-8">
+      <h2 data-i18n="pricing.title">Simple pricing. No surprises.</h2>
+      <p class="text-muted" style="font-size:17px;" data-i18n="pricing.subtitle">Free forever for individuals. Go Pro when you're ready for advanced features.</p>
+    </div>
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="pricing-card">
+        <h3 data-i18n="pricing.free.name">Free</h3>
+        <div style="margin:8px 0 4px;">
+          <span class="price-amount" data-i18n="pricing.free.price">$0</span>
+          <span class="price-period" data-i18n="pricing.free.period">/ forever</span>
+        </div>
+        <ul class="plan-features">
+          <li data-i18n="pricing.free.f1">1 personal profile</li>
+          <li data-i18n="pricing.free.f2">AI-generated weekly meal plan (up to 4 regenerations / month)</li>
+          <li data-i18n="pricing.free.f3">Weekly shopping list</li>
+          <li data-i18n="pricing.free.f4">24-nutrient daily tracker</li>
+          <li data-i18n="pricing.free.f5">Manual meal editing</li>
+          <li data-i18n="pricing.free.f6">Bilingual (EN/ES)</li>
+        </ul>
+        <a href="/onboarding.html" class="btn btn-secondary btn-block" data-i18n="pricing.free.cta">Start free</a>
+      </div>
+
+      <!-- Pro -->
+      <div class="pricing-card featured">
+        <span class="ribbon" data-i18n="pricing.pro.ribbon">Most popular</span>
+        <h3 data-i18n="pricing.pro.name">Pro</h3>
+        <div style="margin:8px 0 4px;">
+          <span class="price-amount" data-i18n="pricing.pro.price">$6.99</span>
+          <span class="price-period" data-i18n="pricing.pro.period">/ month</span>
+        </div>
+        <div class="text-subtle" style="font-size:13px;" data-i18n="pricing.pro.yearly">or $59/year — save 30%</div>
+        <ul class="plan-features">
+          <li data-i18n="pricing.pro.f1">Everything in Free</li>
+          <li data-i18n="pricing.pro.f2">Family group: up to 6 linked members</li>
+          <li data-i18n="pricing.pro.f3">Unlimited AI regenerations + chat with your nutrition coach</li>
+          <li data-i18n="pricing.pro.f4">Sport mode: peri-workout meals, carb cycling, periodization</li>
+          <li data-i18n="pricing.pro.f5">Export to Excel & PDF</li>
+          <li data-i18n="pricing.pro.f6">Google & Apple Calendar sync</li>
+          <li data-i18n="pricing.pro.f7">Progress dashboard (adherence, macro evolution)</li>
+          <li data-i18n="pricing.pro.f8">Supermarket deep-links</li>
+          <li data-i18n="pricing.pro.f9">Recipe book with step-by-step prep</li>
+          <li data-i18n="pricing.pro.f10">4-week ahead planning</li>
+          <li data-i18n="pricing.pro.f11">Priority support</li>
+        </ul>
+        <a href="/onboarding.html?plan=pro" class="btn btn-primary btn-block" data-i18n="pricing.pro.cta">Go Pro</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" id="faq" style="background:var(--bg-muted);">
+  <div class="container-md">
+    <div class="text-center mb-8">
+      <h2 data-i18n="faq.title">Frequently asked</h2>
+    </div>
+    <div class="grid" style="gap:16px;">
+      <details class="card card-flat">
+        <summary style="cursor:pointer;font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-i18n="faq.q1">Is this really free?</span>
+          <span style="color:var(--accent);font-size:22px;">+</span>
+        </summary>
+        <p class="text-muted mt-4 mb-0" data-i18n="faq.a1">Yes. The Free tier is generous and we keep it that way forever.</p>
+      </details>
+      <details class="card card-flat">
+        <summary style="cursor:pointer;font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-i18n="faq.q2">How does the AI know what to recommend?</span>
+          <span style="color:var(--accent);font-size:22px;">+</span>
+        </summary>
+        <p class="text-muted mt-4 mb-0" data-i18n="faq.a2">We use Claude (by Anthropic), a state-of-the-art language model, plus our own nutrient database.</p>
+      </details>
+      <details class="card card-flat">
+        <summary style="cursor:pointer;font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-i18n="faq.q3">Can I trust an AI with my nutrition?</span>
+          <span style="color:var(--accent);font-size:22px;">+</span>
+        </summary>
+        <p class="text-muted mt-4 mb-0" data-i18n="faq.a3">The AI generates a starting point based on widely accepted nutritional guidelines.</p>
+      </details>
+      <details class="card card-flat">
+        <summary style="cursor:pointer;font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-i18n="faq.q4">What about food restrictions?</span>
+          <span style="color:var(--accent);font-size:22px;">+</span>
+        </summary>
+        <p class="text-muted mt-4 mb-0" data-i18n="faq.a4">We support vegetarian, vegan, gluten-free, lactose-free, allergies, kosher, halal, and custom restrictions.</p>
+      </details>
+      <details class="card card-flat">
+        <summary style="cursor:pointer;font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-i18n="faq.q5">Can I cancel anytime?</span>
+          <span style="color:var(--accent);font-size:22px;">+</span>
+        </summary>
+        <p class="text-muted mt-4 mb-0" data-i18n="faq.a5">Yes, no contracts. Cancel from your account page anytime.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="section" style="background:linear-gradient(135deg,var(--emerald-600) 0%,var(--emerald-900) 100%);color:white;text-align:center;">
+  <div class="container-sm">
+    <h2 style="color:white;" data-i18n="cta.title">Ready to eat for performance?</h2>
+    <p style="color:rgba(255,255,255,.85);font-size:18px;" data-i18n="cta.subtitle">Build your first weekly plan in 5 minutes. Free, no credit card.</p>
+    <a href="/onboarding.html" class="btn btn-secondary btn-lg mt-4" style="background:white;color:var(--emerald-700);" data-i18n="cta.button">Build my plan</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="container">
+    <div class="grid grid-4">
+      <div>
+        <div class="brand" style="color:white;">
+          <span class="brand-logo">S</span>
+          SportNutritionPlanning
+        </div>
+        <p class="mt-4" style="color:var(--slate-300);font-size:14px;max-width:280px;" data-i18n="footer.tagline">AI nutrition planning for athletes and families.</p>
+      </div>
+      <div>
+        <h4 data-i18n="footer.product">Product</h4>
+        <ul>
+          <li><a href="#features" data-i18n="nav.features">Features</a></li>
+          <li><a href="#pricing" data-i18n="nav.pricing">Pricing</a></li>
+          <li><a href="#how" data-i18n="nav.howit">How it works</a></li>
+          <li><a href="/onboarding.html" data-i18n="nav.signup">Get started</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 data-i18n="footer.company">Company</h4>
+        <ul>
+          <li><a href="#" data-i18n="footer.about">About</a></li>
+          <li><a href="mailto:hello@sportnutritionplanning.app" data-i18n="footer.contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 data-i18n="footer.legal">Legal</h4>
+        <ul>
+          <li><a href="/privacy.html" data-i18n="footer.privacy">Privacy</a></li>
+          <li><a href="/terms.html" data-i18n="footer.terms">Terms</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span data-i18n="footer.copy">© 2026 SportNutritionPlanning. All rights reserved.</span>
+      <span>Powered by Claude (Anthropic)</span>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/i18n.js"></script>
+</body>
+</html>
