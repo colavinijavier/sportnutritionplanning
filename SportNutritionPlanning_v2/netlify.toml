@@ -5,17 +5,35 @@
 [functions]
   node_bundler = "esbuild"
 
-# Legacy redirect: old family app URL → new authenticated app
 [[redirects]]
   from = "/NutriPlan.html"
   to = "/app.html"
   status = 302
 
-# Pretty URLs
 [[redirects]]
   from = "/signup"
   to = "/login.html"
   status = 302
 
 [[redirects]]
-  fr
+  from = "/signin"
+  to = "/login.html"
+  status = 302
+
+[[redirects]]
+  from = "/pricing"
+  to = "/#pricing"
+  status = 302
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
