@@ -1,7 +1,6 @@
 // netlify/functions/config.js
-// Returns the public client-side config (Supabase URL+anon key, Stripe publishable key,
-// Stripe price IDs) from Netlify environment variables.
-// These values are PUBLIC by design — they're shipped to browsers anyway.
+// Returns the public client-side config from Netlify env vars.
+// Public-safe fields only (no secret tokens).
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +11,9 @@ const cors = {
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors, body: '' };
 
+  const mpEnabled = !!process.env.MP_ACCESS_TOKEN;
+  const stripeEnabled = !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY;
+
   return {
     statusCode: 200,
     headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
@@ -20,6 +22,10 @@ exports.handler = async (event) => {
         url: process.env.SUPABASE_URL || '',
         anonKey: process.env.SUPABASE_ANON_KEY || ''
       },
+      mercadopago: {
+        priceMonthlyARS: Number(process.env.MP_PRICE_MONTHLY_ARS || 0),
+        priceYearlyARS:  Number(process.env.MP_PRICE_YEARLY_ARS  || 0)
+      },
       stripe: {
         publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
         priceMonthly: process.env.STRIPE_PRICE_MONTHLY || '',
@@ -27,7 +33,8 @@ exports.handler = async (event) => {
       },
       features: {
         authEnabled:    !!process.env.SUPABASE_URL && !!process.env.SUPABASE_ANON_KEY,
-        billingEnabled: !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY
+        billingEnabled: mpEnabled || stripeEnabled,
+        paymentProvider: mpEnabled ? 'mercadopago' : (stripeEnabled ? 'stripe' : 'none')
       }
     })
   };
