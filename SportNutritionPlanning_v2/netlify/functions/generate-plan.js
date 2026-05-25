@@ -1,6 +1,6 @@
 // netlify/functions/generate-plan.js
 // Receives onboarding data and produces a complete weekly plan via Claude.
-// Optimized for sub-25s response: compact prompt + capped tokens.
+// Optimized for sub-25s response with EXPLICIT daily kcal targets per meal.
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -47,10 +47,10 @@ exports.handler = async (event) => {
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 3500,
+        max_tokens: 4096,
         system: lang === 'es'
-          ? 'Sos un nutricionista deportivo. Respondes UNICAMENTE con JSON COMPACTO valido (sin markdown, sin espacios extra, sin saltos de linea innecesarios). Empezas con { y terminas con }.'
-          : 'You are a sports nutritionist. Respond ONLY with COMPACT valid JSON (no markdown, no extra whitespace, no unnecessary newlines). Start with { and end with }.',
+          ? 'Sos un nutricionista deportivo experto. Respondes SOLO con JSON compacto valido (sin markdown). CRITICO: las kcal de las comidas de cada dia DEBEN sumar EXACTAMENTE el target diario (margen +/- 3%). Sin excepciones.'
+          : 'You are an expert sports nutritionist. Respond ONLY with compact valid JSON (no markdown). CRITICAL: the sum of meal kcal each day MUST EQUAL the daily target (within +/-3%). No exceptions.',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -74,6 +74,9 @@ exports.handler = async (event) => {
       return jsonResp(500, { error: 'Claude returned invalid JSON', raw: text.slice(0, 400) });
     }
 
+    // Server-side validation: compute daily kcal sums and flag deviations
+    const validation = validatePlan(plan, primary);
+
     plan.targets = primary;
     plan.profile_snapshot = {
       name: input.name, age: input.age, sex: input.sex,
@@ -82,6 +85,7 @@ exports.handler = async (event) => {
       restrictions: input.restrictions || [], household: input.household,
       members: members.map(m => ({ name: m.name, age: m.age, sex: m.sex, targets: m.targets }))
     };
+    plan.validation = validation;
     plan.generated_at = new Date().toISOString();
     plan.lang = lang;
     plan.version = 1;
@@ -91,6 +95,30 @@ exports.handler = async (event) => {
     return jsonResp(500, { error: e.message || 'Unknown error' });
   }
 };
+
+function validatePlan(plan, targets) {
+  const target = targets.kcal;
+  const lower = target * 0.92;
+  const upper = target * 1.08;
+  const days = (plan.days || []).map(d => {
+    const sums = (d.meals || []).reduce((a, m) => {
+      const x = m.macros || {};
+      a.kcal += x.kcal || 0;
+      a.protein_g += x.protein_g || 0;
+      a.carbs_g += x.carbs_g || 0;
+      a.fat_g += x.fat_g || 0;
+      return a;
+    }, { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+    return {
+      name: d.name,
+      sums,
+      kcal_pct_of_target: target ? Math.round(sums.kcal / target * 100) : 0,
+      in_range: sums.kcal >= lower && sums.kcal <= upper
+    };
+  });
+  const all_ok = days.every(d => d.in_range);
+  return { target_kcal: target, days, all_ok };
+}
 
 function computeTargets(p) {
   const bmr = (10 * p.weight) + (6.25 * p.height) - (5 * p.age) + (p.sex === 'male' ? 5 : -161);
@@ -143,7 +171,8 @@ function estimateWeight(age, sex) {
 function buildPrompt({ profile, primary, members, lang }) {
   const restrictions = (profile.restrictions || []).join(', ') || (lang === 'es' ? 'ninguna' : 'none');
   const dislikes = (profile.dislikes || '').slice(0, 150);
-  const trainingLine = (profile.trains === 'yes')
+  const trains = profile.trains === 'yes';
+  const trainingLine = trains
     ? profile.sport + ' ' + profile.days + 'd/wk ' + profile.intensity
     : (lang === 'es' ? 'sedentario' : 'sedentary');
 
@@ -152,20 +181,42 @@ function buildPrompt({ profile, primary, members, lang }) {
     : '';
 
   const familyHint = members.length > 0
-    ? '\nFAMILIA(' + (members.length+1) + '): primary ' + primary.kcal + 'kcal + ' + memberSummary
+    ? '\nHOUSEHOLD(' + (members.length+1) + '): primary ' + primary.kcal + 'kcal + ' + memberSummary + '. Each meal title/ingredients serves the WHOLE household; macros shown are PER-PERSON for the primary user.'
     : '';
 
+  // Per-meal kcal targets (explicit allocation)
+  const K = primary.kcal;
+  const dist = trains
+    ? { breakfast: 0.22, lunch: 0.28, snack: 0.08, preworkout: 0.12, dinner: 0.30 }
+    : { breakfast: 0.25, lunch: 0.35, snack: 0.10, dinner: 0.30 };
+  const allocLines = Object.entries(dist).map(([slot, pct]) =>
+    '  ' + slot + ': ~' + Math.round(K * pct) + ' kcal'
+  ).join('\n');
+
+  // Per-meal protein targets
+  const P = primary.protein_g;
+  const proteinDist = trains
+    ? { breakfast: 0.25, lunch: 0.28, snack: 0.10, preworkout: 0.05, dinner: 0.32 }
+    : { breakfast: 0.25, lunch: 0.32, snack: 0.10, dinner: 0.33 };
+  const protLines = Object.entries(proteinDist).map(([slot, pct]) =>
+    '  ' + slot + ': ~' + Math.round(P * pct) + 'g'
+  ).join('\n');
+
   const isES = lang === 'es';
-  const langName = isES ? 'spanish' : 'english';
+  const langName = isES ? 'spanish (Argentina-friendly)' : 'english';
   const dayNames = isES ? 'Lunes,Martes,Miercoles,Jueves,Viernes,Sabado,Domingo' : 'Mon,Tue,Wed,Thu,Fri,Sat,Sun';
 
-  const schema = '{"welcome":"<one sentence, ' + langName + '>","tips":["t1","t2","t3"],"days":[{"name":"<day>","is_training_day":<bool>,"meals":[{"slot":"breakfast","time":"07:30","title":"<name>","ingredients":["i1","i2","i3"],"macros":{"kcal":N,"protein_g":N,"carbs_g":N,"fat_g":N}}]}],"shopping_list":{"Proteins":[{"item":"x","quantity":"500g"}],"Vegetables":[],"Fruits":[],"Grains":[],"Dairy":[],"Pantry":[],"Other":[]}}';
+  const schema = '{"welcome":"<one sentence, ' + langName + '>","tips":["t1","t2","t3"],"days":[{"name":"<day>","is_training_day":<bool>,"meals":[{"slot":"breakfast","time":"07:30","title":"<name>","ingredients":["100g oats","1 banana","30g whey"],"macros":{"kcal":N,"protein_g":N,"carbs_g":N,"fat_g":N}}]}],"shopping_list":{"Proteins":[{"item":"x","quantity":"500g"}],"Vegetables":[],"Fruits":[],"Grains":[],"Dairy":[],"Pantry":[],"Other":[]}}';
 
   const intro = isES
-    ? 'Genera plan nutricional semanal compacto. JSON sin espacios extra.'
-    : 'Generate compact weekly nutrition plan. JSON with no extra whitespace.';
+    ? 'Genera plan nutricional semanal. JSON compacto sin espacios extra.'
+    : 'Generate weekly nutrition plan. Compact JSON, no extra whitespace.';
 
-  return intro + '\n\nPROFILE: ' + profile.name + ',' + profile.age + 'y,' + profile.sex + ',' + profile.height + 'cm,' + profile.weight + 'kg,' + (profile.country||'-') + ',' + trainingLine + ',goal=' + (profile.goal||'health') + ',restr=' + restrictions + ',dislikes=' + (dislikes||'none') + '\nTARGETS: ' + primary.kcal + 'kcal P' + primary.protein_g + ' C' + primary.carbs_g + ' F' + primary.fat_g + familyHint + '\n\nRULES:\n- 7 days (' + dayNames + '). Each day: breakfast,lunch,snack,dinner. Training days: add pre-workout meal.\n- Each meal: 2-4 ingredients max. NO notes field.\n- macros per meal must sum to daily target +/-5%.\n- Respect restrictions strictly.\n- Shopping list: consolidate weekly totals per category. Use realistic units (kg, g, L, ml, u).\n- Output COMPACT JSON (minify), no markdown.\n\nSCHEMA (follow exactly, fill arrays with all 7 days and all categories):\n' + schema;
+  const trainingDays = trains
+    ? '\nTRAINING DAYS (Mon, Wed, Fri, Sat for sport ' + profile.sport + '): set is_training_day=true, INCLUDE a 5th preworkout meal.'
+    : '\nNO TRAINING DAYS: is_training_day=false for all days, only 4 meals per day.';
+
+  return intro + '\n\nPROFILE: ' + profile.name + ',' + profile.age + 'y,' + profile.sex + ',' + profile.height + 'cm,' + profile.weight + 'kg,' + (profile.country||'-') + ',' + trainingLine + ',goal=' + (profile.goal||'health') + ',restr=' + restrictions + ',dislikes=' + (dislikes||'none') + familyHint + '\n\nDAILY TARGETS (MUST hit ±3% each day):\n  TOTAL: ' + K + ' kcal | ' + P + 'g protein | ' + primary.carbs_g + 'g carbs | ' + primary.fat_g + 'g fat\n\nKCAL PER MEAL (use these as guideline, total each day = ' + K + ' kcal):\n' + allocLines + '\n\nPROTEIN PER MEAL (use these as guideline, total each day = ' + P + 'g):\n' + protLines + trainingDays + '\n\nRULES:\n1. Generate ALL 7 days (' + dayNames + ').\n2. Each meal: 3-5 ingredients with quantities (e.g., "150g chicken breast","200g sweet potato").\n3. CRITICAL: sum of meal kcal each day MUST = ' + K + ' kcal ±3%. Adjust portion sizes (e.g., "200g rice" not "100g") to reach the target.\n4. Respect ALL restrictions strictly. NEVER use forbidden ingredients.\n5. Vary ingredients across the week. Each day should feel different.\n6. Shopping list: consolidate WEEKLY totals per category. Realistic units (kg, g, L, ml, u). Cover ALL ingredients used.\n7. Tips: 3 short actionable tips tailored to this profile.\n8. Output COMPACT JSON, no markdown.\n\nSCHEMA (follow exactly):\n' + schema;
 }
 
 function jsonResp(statusCode, body) {
