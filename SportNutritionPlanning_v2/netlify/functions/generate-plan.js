@@ -18,59 +18,36 @@ exports.handler = async (event) => {
   let input;
   try { input = JSON.parse(event.body); } catch (e) { return jsonResp(400, { error: 'Invalid JSON' }); }
 
-  // ---- Validate required fields ----
   if (!input.name || !input.age || !input.sex || !input.height || !input.weight) {
     return jsonResp(400, { error: 'Missing required profile fields (name, age, sex, height, weight).' });
   }
 
-  // ---- Compute targets server-side ----
   const lang = (input.lang === 'es') ? 'es' : 'en';
   const primary = computeTargets({
-    age: input.age,
-    sex: input.sex,
-    height: input.height,
-    weight: input.weight,
-    trains: input.trains === 'yes',
-    days: input.days || 0,
-    intensity: input.intensity || 'mid',
-    goal: input.goal || 'health'
+    age: input.age, sex: input.sex, height: input.height, weight: input.weight,
+    trains: input.trains === 'yes', days: input.days || 0,
+    intensity: input.intensity || 'mid', goal: input.goal || 'health'
   });
 
   const members = (input.household === 'family' && Array.isArray(input.members))
     ? input.members.map(m => ({
-        name: m.name || '—',
-        age: m.age,
-        sex: m.sex || 'male',
-        sport: m.sport || '',
-        // very rough height/weight estimate when not provided (used only for relative sizing)
+        name: m.name || '—', age: m.age, sex: m.sex || 'male', sport: m.sport || '',
         targets: computeTargets({
-          age: m.age || 30,
-          sex: m.sex || 'male',
-          height: estimateHeight(m.age, m.sex),
-          weight: estimateWeight(m.age, m.sex),
-          trains: !!m.sport,
-          days: m.sport ? 3 : 0,
-          intensity: 'mid',
-          goal: 'health'
+          age: m.age || 30, sex: m.sex || 'male',
+          height: estimateHeight(m.age, m.sex), weight: estimateWeight(m.age, m.sex),
+          trains: !!m.sport, days: m.sport ? 3 : 0, intensity: 'mid', goal: 'health'
         })
-      }))
-    : [];
+      })) : [];
 
-  // ---- Build prompt ----
   const prompt = buildPrompt({ profile: input, primary, members, lang });
 
-  // ---- Call Claude ----
   try {
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json'
-      },
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: lang === 'es'
           ? 'Sos un nutricionista deportivo experto. Respondés UNICAMENTE con JSON puro válido (sin markdown, sin code fences, sin texto extra). Empezás directo con { y terminás con }. Seguís EXACTAMENTE la estructura indicada en el prompt.'
           : 'You are an expert sports nutritionist. You respond ONLY with valid raw JSON (no markdown, no code fences, no extra text). You start directly with { and end with }. You follow EXACTLY the structure indicated in the prompt.',
@@ -97,19 +74,12 @@ exports.handler = async (event) => {
       return jsonResp(500, { error: 'Claude returned invalid JSON. Try again.', raw: text.slice(0, 600) });
     }
 
-    // Inject computed targets so client has authoritative numbers
     plan.targets = primary;
     plan.profile_snapshot = {
-      name: input.name,
-      age: input.age,
-      sex: input.sex,
-      height: input.height,
-      weight: input.weight,
-      country: input.country,
-      sport: input.sport || null,
-      goal: input.goal || null,
-      restrictions: input.restrictions || [],
-      household: input.household,
+      name: input.name, age: input.age, sex: input.sex,
+      height: input.height, weight: input.weight, country: input.country,
+      sport: input.sport || null, goal: input.goal || null,
+      restrictions: input.restrictions || [], household: input.household,
       members: members.map(m => ({ name: m.name, age: m.age, sex: m.sex, targets: m.targets }))
     };
     plan.generated_at = new Date().toISOString();
@@ -122,14 +92,8 @@ exports.handler = async (event) => {
   }
 };
 
-// ============================================================
-// Math helpers
-// ============================================================
 function computeTargets(p) {
-  // Mifflin-St Jeor
   const bmr = (10 * p.weight) + (6.25 * p.height) - (5 * p.age) + (p.sex === 'male' ? 5 : -161);
-
-  // Activity multiplier
   let factor = 1.2;
   if (p.trains && p.days > 0) {
     if (p.days <= 2) factor = 1.375;
@@ -140,15 +104,11 @@ function computeTargets(p) {
     if (p.intensity === 'high') factor += 0.075;
   }
   let tdee = bmr * factor;
-
-  // Goal adjustment
   if (p.goal === 'lose') tdee *= 0.82;
   else if (p.goal === 'gain') tdee *= 1.12;
   else if (p.goal === 'recomp') tdee *= 0.95;
-  // performance / health: leave at maintenance
 
   const kcal = Math.round(tdee);
-  // Macros
   let pPerKg = 1.6;
   if (p.trains) {
     if (p.intensity === 'high') pPerKg = 2.0;
@@ -160,22 +120,10 @@ function computeTargets(p) {
   const protein_g = Math.round(p.weight * pPerKg);
   const fat_g = Math.round(kcal * 0.27 / 9);
   const carbs_g = Math.round((kcal - protein_g * 4 - fat_g * 9) / 4);
+  const fiber_g = Math.round(kcal / 1000 * 14);
+  const water_ml = Math.round(p.weight * 35);
 
-  // Fiber & water heuristics
-  const fiber_g = Math.round(kcal / 1000 * 14); // ~14g per 1000 kcal
-  const water_ml = Math.round(p.weight * 35);   // ~35 ml/kg
-
-  return {
-    bmr: Math.round(bmr),
-    tdee: kcal,
-    kcal,
-    protein_g,
-    carbs_g,
-    fat_g,
-    fiber_g,
-    water_ml,
-    activity_factor: Number(factor.toFixed(2))
-  };
+  return { bmr: Math.round(bmr), tdee: kcal, kcal, protein_g, carbs_g, fat_g, fiber_g, water_ml, activity_factor: Number(factor.toFixed(2)) };
 }
 
 function estimateHeight(age, sex) {
@@ -193,67 +141,56 @@ function estimateWeight(age, sex) {
   return sex === 'female' ? 62 : 75;
 }
 
-// ============================================================
-// Prompt
-// ============================================================
 function buildPrompt({ profile, primary, members, lang }) {
   const isFamily = members.length > 0;
   const restrictions = (profile.restrictions || []).join(', ') || (lang === 'es' ? 'ninguna' : 'none');
   const dislikes = (profile.dislikes || '').slice(0, 200) || (lang === 'es' ? 'ninguno' : 'none');
   const trainingLine = (profile.trains === 'yes')
-    ? `${profile.sport} · ${profile.days}x/week · ${profile.intensity} intensity · trains in the ${profile.timing}`
+    ? `${profile.sport} ${profile.days}x/week ${profile.intensity} intensity in the ${profile.timing}`
     : (lang === 'es' ? 'no entrena regularmente' : 'does not train regularly');
 
   const memberSummary = members.map((m, i) => (
-    `  - ${m.name || '#'+(i+1)} (${m.sex}, ${m.age}y${m.sport ? ', '+m.sport : ''}) → ${m.targets.kcal} kcal, ${m.targets.protein_g}g P`
+    `  - ${m.name || '#'+(i+1)} (${m.sex}, ${m.age}y${m.sport ? ', '+m.sport : ''}) -> ${m.targets.kcal} kcal, ${m.targets.protein_g}g P`
   )).join('\n');
 
-  const familyBlock = isFamily ? `
-HOUSEHOLD (${members.length + 1} people total — primary user + ${members.length} family members):
-  - ${profile.name} (primary, ${profile.sex}, ${profile.age}y) → ${primary.kcal} kcal, ${primary.protein_g}g P
-${memberSummary}
-` : `
-SOLO USER — only one person to plan for.
-`;
+  const familyBlock = isFamily ? `\nHOUSEHOLD (${members.length + 1} people total):\n  - ${profile.name} (primary, ${profile.sex}, ${profile.age}y) -> ${primary.kcal} kcal\n${memberSummary}\n` : `\nSOLO USER\n`;
 
   const intro = lang === 'es'
-    ? `Generá un plan nutricional semanal completo para el siguiente perfil. Usá las cantidades objetivo calculadas. Las cantidades por comida deben ser realistas y prácticas.`
-    : `Generate a complete weekly nutrition plan for the following profile. Use the calculated daily targets. Per-meal quantities should be realistic and practical.`;
+    ? 'Genera un plan nutricional semanal completo. Usa las cantidades objetivo calculadas. Cantidades realistas y practicas.'
+    : 'Generate a complete weekly nutrition plan. Use the calculated targets. Realistic per-meal quantities.';
 
   const structure = lang === 'es' ? STRUCTURE_ES : STRUCTURE_EN;
 
   return `${intro}
 
-USER PROFILE:
-- Name: ${profile.name}
-- Age: ${profile.age}, sex: ${profile.sex}
-- Height: ${profile.height} cm, weight: ${profile.weight} kg
-- Country: ${profile.country || '—'} ${profile.city ? '· ' + profile.city : ''}
+USER:
+- Name: ${profile.name}, Age: ${profile.age}, Sex: ${profile.sex}
+- Height: ${profile.height}cm, Weight: ${profile.weight}kg
+- Country: ${profile.country || '-'} ${profile.city || ''}
 - Training: ${trainingLine}
 - Goal: ${profile.goal || 'health'}
 - Restrictions: ${restrictions}
 - Dislikes: ${dislikes}
-- Output language: ${lang === 'es' ? 'Spanish (Argentina-friendly)' : 'English'}
+- Output language: ${lang === 'es' ? 'Spanish' : 'English'}
 
-PRIMARY USER DAILY TARGETS (computed from Mifflin-St Jeor + activity + goal):
-  ${primary.kcal} kcal · ${primary.protein_g}g protein · ${primary.carbs_g}g carbs · ${primary.fat_g}g fat · ${primary.fiber_g}g fiber · ${primary.water_ml} ml water
+DAILY TARGETS: ${primary.kcal} kcal, ${primary.protein_g}g P, ${primary.carbs_g}g C, ${primary.fat_g}g F, ${primary.fiber_g}g fiber
 ${familyBlock}
 
-INSTRUCTIONS:
-1. Build 7 days (Mon-Sun) of meals. Each day has 4 meals: breakfast, lunch, snack, dinner. Add a 5th "pre/post workout" mini-meal on training days.
-2. Hit the daily targets within ±5%. The macros per meal must sum to the daily total.
-3. Respect ALL restrictions strictly. Avoid disliked foods.
-4. For training days (if sport=yes), align carbs higher around the training time.
-5. Vary ingredients across the week so the shopping list is reasonable.
-6. Shopping list: consolidate quantities across the whole week and (if family) across all members. Group by category (proteins, vegetables, fruits, grains, dairy, pantry, other).
-7. Provide a short welcome message (3 lines max) and 3 quick tips relevant to this profile.
+RULES:
+1. 7 days (Mon-Sun). Each day: breakfast, lunch, snack, dinner. Training days add 5th peri-workout meal.
+2. Hit daily targets within +/-5%. Per-meal macros sum to daily total.
+3. Respect ALL restrictions strictly.
+4. Training days have more carbs around training time.
+5. Vary ingredients across the week.
+6. Shopping list: consolidate quantities, group by category.
+7. Welcome message (3 lines max) and 3 tips for this profile.
 
-RESPOND WITH EXACTLY THIS JSON STRUCTURE (no extra fields, no markdown):
+RESPOND WITH EXACTLY THIS JSON (no markdown, no extra text):
 ${structure}`;
 }
 
 const STRUCTURE_EN = `{
-  "welcome": "Short personalized welcome (max 3 sentences).",
+  "welcome": "Short personalized welcome.",
   "tips": ["Tip 1", "Tip 2", "Tip 3"],
   "weekly_macros_avg": { "kcal": 2400, "protein_g": 150, "carbs_g": 270, "fat_g": 75 },
   "days": [
@@ -261,30 +198,18 @@ const STRUCTURE_EN = `{
       "name": "Monday",
       "is_training_day": true,
       "meals": [
-        {
-          "slot": "breakfast",
-          "time": "07:30",
-          "title": "Meal name",
-          "ingredients": ["100g oats", "1 banana", "30g whey", "200ml almond milk"],
-          "macros": { "kcal": 520, "protein_g": 38, "carbs_g": 72, "fat_g": 10 },
-          "notes": "optional short note"
-        }
+        { "slot": "breakfast", "time": "07:30", "title": "Meal name", "ingredients": ["100g oats", "1 banana"], "macros": { "kcal": 520, "protein_g": 38, "carbs_g": 72, "fat_g": 10 }, "notes": "" }
       ]
     }
   ],
   "shopping_list": {
     "Proteins": [{ "item": "Chicken breast", "quantity": "1.4 kg" }],
-    "Vegetables": [{ "item": "Spinach", "quantity": "400 g" }],
-    "Fruits": [{ "item": "Banana", "quantity": "12 u" }],
-    "Grains": [{ "item": "Oats", "quantity": "700 g" }],
-    "Dairy": [],
-    "Pantry": [],
-    "Other": []
+    "Vegetables": [], "Fruits": [], "Grains": [], "Dairy": [], "Pantry": [], "Other": []
   }
 }`;
 
 const STRUCTURE_ES = `{
-  "welcome": "Mensaje de bienvenida personalizado breve (máximo 3 oraciones).",
+  "welcome": "Mensaje de bienvenida breve.",
   "tips": ["Tip 1", "Tip 2", "Tip 3"],
   "weekly_macros_avg": { "kcal": 2400, "protein_g": 150, "carbs_g": 270, "fat_g": 75 },
   "days": [
@@ -292,25 +217,13 @@ const STRUCTURE_ES = `{
       "name": "Lunes",
       "is_training_day": true,
       "meals": [
-        {
-          "slot": "breakfast",
-          "time": "07:30",
-          "title": "Nombre de la comida",
-          "ingredients": ["100g avena", "1 banana", "30g whey", "200ml leche de almendras"],
-          "macros": { "kcal": 520, "protein_g": 38, "carbs_g": 72, "fat_g": 10 },
-          "notes": "nota opcional"
-        }
+        { "slot": "breakfast", "time": "07:30", "title": "Nombre", "ingredients": ["100g avena", "1 banana"], "macros": { "kcal": 520, "protein_g": 38, "carbs_g": 72, "fat_g": 10 }, "notes": "" }
       ]
     }
   ],
   "shopping_list": {
-    "Proteínas": [{ "item": "Pechuga de pollo", "quantity": "1,4 kg" }],
-    "Verduras":  [{ "item": "Espinaca", "quantity": "400 g" }],
-    "Frutas":    [{ "item": "Banana", "quantity": "12 u" }],
-    "Cereales":  [{ "item": "Avena", "quantity": "700 g" }],
-    "Lácteos":   [],
-    "Almacén":   [],
-    "Otros":     []
+    "Proteinas": [{ "item": "Pechuga de pollo", "quantity": "1.4 kg" }],
+    "Verduras": [], "Frutas": [], "Cereales": [], "Lacteos": [], "Almacen": [], "Otros": []
   }
 }`;
 
