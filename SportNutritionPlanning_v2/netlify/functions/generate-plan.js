@@ -1,6 +1,6 @@
 // netlify/functions/generate-plan.js
 // Receives onboarding data and produces a complete weekly plan via Claude.
-// Server-side computes BMR/TDEE/macro targets so the AI works with validated numbers.
+// Optimized for sub-25s response: compact prompt + capped tokens.
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +19,7 @@ exports.handler = async (event) => {
   try { input = JSON.parse(event.body); } catch (e) { return jsonResp(400, { error: 'Invalid JSON' }); }
 
   if (!input.name || !input.age || !input.sex || !input.height || !input.weight) {
-    return jsonResp(400, { error: 'Missing required profile fields (name, age, sex, height, weight).' });
+    return jsonResp(400, { error: 'Missing required profile fields' });
   }
 
   const lang = (input.lang === 'es') ? 'es' : 'en';
@@ -31,7 +31,7 @@ exports.handler = async (event) => {
 
   const members = (input.household === 'family' && Array.isArray(input.members))
     ? input.members.map(m => ({
-        name: m.name || '—', age: m.age, sex: m.sex || 'male', sport: m.sport || '',
+        name: m.name || '-', age: m.age, sex: m.sex || 'male', sport: m.sport || '',
         targets: computeTargets({
           age: m.age || 30, sex: m.sex || 'male',
           height: estimateHeight(m.age, m.sex), weight: estimateWeight(m.age, m.sex),
@@ -47,10 +47,10 @@ exports.handler = async (event) => {
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 8192,
+        max_tokens: 3500,
         system: lang === 'es'
-          ? 'Sos un nutricionista deportivo experto. Respondés UNICAMENTE con JSON puro válido (sin markdown, sin code fences, sin texto extra). Empezás directo con { y terminás con }. Seguís EXACTAMENTE la estructura indicada en el prompt.'
-          : 'You are an expert sports nutritionist. You respond ONLY with valid raw JSON (no markdown, no code fences, no extra text). You start directly with { and end with }. You follow EXACTLY the structure indicated in the prompt.',
+          ? 'Sos un nutricionista deportivo. Respondes UNICAMENTE con JSON COMPACTO valido (sin markdown, sin espacios extra, sin saltos de linea innecesarios). Empezas con { y terminas con }.'
+          : 'You are a sports nutritionist. Respond ONLY with COMPACT valid JSON (no markdown, no extra whitespace, no unnecessary newlines). Start with { and end with }.',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -71,7 +71,7 @@ exports.handler = async (event) => {
     let plan;
     try { plan = JSON.parse(text); }
     catch (e) {
-      return jsonResp(500, { error: 'Claude returned invalid JSON. Try again.', raw: text.slice(0, 600) });
+      return jsonResp(500, { error: 'Claude returned invalid JSON', raw: text.slice(0, 400) });
     }
 
     plan.targets = primary;
@@ -88,7 +88,7 @@ exports.handler = async (event) => {
 
     return jsonResp(200, { plan, usage: data.usage });
   } catch (e) {
-    return jsonResp(500, { error: e.message || 'Unknown function error' });
+    return jsonResp(500, { error: e.message || 'Unknown error' });
   }
 };
 
@@ -122,7 +122,6 @@ function computeTargets(p) {
   const carbs_g = Math.round((kcal - protein_g * 4 - fat_g * 9) / 4);
   const fiber_g = Math.round(kcal / 1000 * 14);
   const water_ml = Math.round(p.weight * 35);
-
   return { bmr: Math.round(bmr), tdee: kcal, kcal, protein_g, carbs_g, fat_g, fiber_g, water_ml, activity_factor: Number(factor.toFixed(2)) };
 }
 
@@ -142,90 +141,32 @@ function estimateWeight(age, sex) {
 }
 
 function buildPrompt({ profile, primary, members, lang }) {
-  const isFamily = members.length > 0;
   const restrictions = (profile.restrictions || []).join(', ') || (lang === 'es' ? 'ninguna' : 'none');
-  const dislikes = (profile.dislikes || '').slice(0, 200) || (lang === 'es' ? 'ninguno' : 'none');
+  const dislikes = (profile.dislikes || '').slice(0, 150);
   const trainingLine = (profile.trains === 'yes')
-    ? `${profile.sport} ${profile.days}x/week ${profile.intensity} intensity in the ${profile.timing}`
-    : (lang === 'es' ? 'no entrena regularmente' : 'does not train regularly');
+    ? profile.sport + ' ' + profile.days + 'd/wk ' + profile.intensity
+    : (lang === 'es' ? 'sedentario' : 'sedentary');
 
-  const memberSummary = members.map((m, i) => (
-    `  - ${m.name || '#'+(i+1)} (${m.sex}, ${m.age}y${m.sport ? ', '+m.sport : ''}) -> ${m.targets.kcal} kcal, ${m.targets.protein_g}g P`
-  )).join('\n');
+  const memberSummary = members.length > 0
+    ? members.map(m => m.name + '(' + m.sex[0] + ',' + m.age + ',' + m.targets.kcal + 'kcal)').join('; ')
+    : '';
 
-  const familyBlock = isFamily ? `\nHOUSEHOLD (${members.length + 1} people total):\n  - ${profile.name} (primary, ${profile.sex}, ${profile.age}y) -> ${primary.kcal} kcal\n${memberSummary}\n` : `\nSOLO USER\n`;
+  const familyHint = members.length > 0
+    ? '\nFAMILIA(' + (members.length+1) + '): primary ' + primary.kcal + 'kcal + ' + memberSummary
+    : '';
 
-  const intro = lang === 'es'
-    ? 'Genera un plan nutricional semanal completo. Usa las cantidades objetivo calculadas. Cantidades realistas y practicas.'
-    : 'Generate a complete weekly nutrition plan. Use the calculated targets. Realistic per-meal quantities.';
+  const isES = lang === 'es';
+  const langName = isES ? 'spanish' : 'english';
+  const dayNames = isES ? 'Lunes,Martes,Miercoles,Jueves,Viernes,Sabado,Domingo' : 'Mon,Tue,Wed,Thu,Fri,Sat,Sun';
 
-  const structure = lang === 'es' ? STRUCTURE_ES : STRUCTURE_EN;
+  const schema = '{"welcome":"<one sentence, ' + langName + '>","tips":["t1","t2","t3"],"days":[{"name":"<day>","is_training_day":<bool>,"meals":[{"slot":"breakfast","time":"07:30","title":"<name>","ingredients":["i1","i2","i3"],"macros":{"kcal":N,"protein_g":N,"carbs_g":N,"fat_g":N}}]}],"shopping_list":{"Proteins":[{"item":"x","quantity":"500g"}],"Vegetables":[],"Fruits":[],"Grains":[],"Dairy":[],"Pantry":[],"Other":[]}}';
 
-  return `${intro}
+  const intro = isES
+    ? 'Genera plan nutricional semanal compacto. JSON sin espacios extra.'
+    : 'Generate compact weekly nutrition plan. JSON with no extra whitespace.';
 
-USER:
-- Name: ${profile.name}, Age: ${profile.age}, Sex: ${profile.sex}
-- Height: ${profile.height}cm, Weight: ${profile.weight}kg
-- Country: ${profile.country || '-'} ${profile.city || ''}
-- Training: ${trainingLine}
-- Goal: ${profile.goal || 'health'}
-- Restrictions: ${restrictions}
-- Dislikes: ${dislikes}
-- Output language: ${lang === 'es' ? 'Spanish' : 'English'}
-
-DAILY TARGETS: ${primary.kcal} kcal, ${primary.protein_g}g P, ${primary.carbs_g}g C, ${primary.fat_g}g F, ${primary.fiber_g}g fiber
-${familyBlock}
-
-RULES:
-1. 7 days (Mon-Sun). Each day: breakfast, lunch, snack, dinner. Training days add 5th peri-workout meal.
-2. Hit daily targets within +/-5%. Per-meal macros sum to daily total.
-3. Respect ALL restrictions strictly.
-4. Training days have more carbs around training time.
-5. Vary ingredients across the week.
-6. Shopping list: consolidate quantities, group by category.
-7. Welcome message (3 lines max) and 3 tips for this profile.
-
-RESPOND WITH EXACTLY THIS JSON (no markdown, no extra text):
-${structure}`;
+  return intro + '\n\nPROFILE: ' + profile.name + ',' + profile.age + 'y,' + profile.sex + ',' + profile.height + 'cm,' + profile.weight + 'kg,' + (profile.country||'-') + ',' + trainingLine + ',goal=' + (profile.goal||'health') + ',restr=' + restrictions + ',dislikes=' + (dislikes||'none') + '\nTARGETS: ' + primary.kcal + 'kcal P' + primary.protein_g + ' C' + primary.carbs_g + ' F' + primary.fat_g + familyHint + '\n\nRULES:\n- 7 days (' + dayNames + '). Each day: breakfast,lunch,snack,dinner. Training days: add pre-workout meal.\n- Each meal: 2-4 ingredients max. NO notes field.\n- macros per meal must sum to daily target +/-5%.\n- Respect restrictions strictly.\n- Shopping list: consolidate weekly totals per category. Use realistic units (kg, g, L, ml, u).\n- Output COMPACT JSON (minify), no markdown.\n\nSCHEMA (follow exactly, fill arrays with all 7 days and all categories):\n' + schema;
 }
-
-const STRUCTURE_EN = `{
-  "welcome": "Short personalized welcome.",
-  "tips": ["Tip 1", "Tip 2", "Tip 3"],
-  "weekly_macros_avg": { "kcal": 2400, "protein_g": 150, "carbs_g": 270, "fat_g": 75 },
-  "days": [
-    {
-      "name": "Monday",
-      "is_training_day": true,
-      "meals": [
-        { "slot": "breakfast", "time": "07:30", "title": "Meal name", "ingredients": ["100g oats", "1 banana"], "macros": { "kcal": 520, "protein_g": 38, "carbs_g": 72, "fat_g": 10 }, "notes": "" }
-      ]
-    }
-  ],
-  "shopping_list": {
-    "Proteins": [{ "item": "Chicken breast", "quantity": "1.4 kg" }],
-    "Vegetables": [], "Fruits": [], "Grains": [], "Dairy": [], "Pantry": [], "Other": []
-  }
-}`;
-
-const STRUCTURE_ES = `{
-  "welcome": "Mensaje de bienvenida breve.",
-  "tips": ["Tip 1", "Tip 2", "Tip 3"],
-  "weekly_macros_avg": { "kcal": 2400, "protein_g": 150, "carbs_g": 270, "fat_g": 75 },
-  "days": [
-    {
-      "name": "Lunes",
-      "is_training_day": true,
-      "meals": [
-        { "slot": "breakfast", "time": "07:30", "title": "Nombre", "ingredients": ["100g avena", "1 banana"], "macros": { "kcal": 520, "protein_g": 38, "carbs_g": 72, "fat_g": 10 }, "notes": "" }
-      ]
-    }
-  ],
-  "shopping_list": {
-    "Proteinas": [{ "item": "Pechuga de pollo", "quantity": "1.4 kg" }],
-    "Verduras": [], "Frutas": [], "Cereales": [], "Lacteos": [], "Almacen": [], "Otros": []
-  }
-}`;
 
 function jsonResp(statusCode, body) {
   return {
