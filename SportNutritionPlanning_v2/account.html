@@ -237,31 +237,54 @@
   // ============================================================
   // Pricing toggle (monthly / yearly)
   // ============================================================
+  const provider = (SNP.auth.config && SNP.auth.config.features && SNP.auth.config.features.paymentProvider) || 'none';
+  const mp = (SNP.auth.config && SNP.auth.config.mercadopago) || {};
+  const fmt = (n) => 'ARS ' + (Number(n)||0).toLocaleString('es-AR');
   let billing = 'monthly';
+
+  function refreshPriceLabels() {
+    if (provider === 'mercadopago') {
+      if (billing === 'monthly') {
+        $('#priceAmt').textContent = fmt(mp.priceMonthlyARS || 6999);
+        $('#pricePeriod').textContent = ' / mes';
+        $('#yearlyHint').textContent = 'Facturación mensual. Cancelas cuando quieras.';
+      } else {
+        $('#priceAmt').textContent = fmt(mp.priceYearlyARS || 59000);
+        $('#pricePeriod').textContent = ' / año';
+        const mo = Math.round((mp.priceYearlyARS || 59000) / 12);
+        $('#yearlyHint').textContent = 'Son ' + fmt(mo) + '/mes — ahorrás ~30%.';
+      }
+      $('#checkoutBtn').textContent = 'Pagar con MercadoPago';
+    } else {
+      if (billing === 'monthly') {
+        $('#priceAmt').textContent = '$6.99';
+        $('#pricePeriod').textContent = ' / month';
+        $('#yearlyHint').textContent = 'Billed monthly. Cancel anytime.';
+      } else {
+        $('#priceAmt').textContent = '$59';
+        $('#pricePeriod').textContent = ' / year';
+        $('#yearlyHint').textContent = "That's $4.92/mo — save 30%.";
+      }
+    }
+  }
+  refreshPriceLabels();
+
   document.querySelectorAll('.toggle-yearly button').forEach(b => {
     b.addEventListener('click', () => {
       document.querySelectorAll('.toggle-yearly button').forEach(x => x.classList.remove('is-active'));
       b.classList.add('is-active');
       billing = b.dataset.billing;
-      if (billing === 'monthly') {
-        $('#priceAmt').textContent = '$6.99';
-        $('#pricePeriod').textContent = '/ month';
-        $('#yearlyHint').textContent = 'Billed monthly. Cancel anytime.';
-      } else {
-        $('#priceAmt').textContent = '$59';
-        $('#pricePeriod').textContent = '/ year';
-        $('#yearlyHint').textContent = 'That\'s $4.92/mo — save 30%.';
-      }
+      refreshPriceLabels();
     });
   });
 
   // ============================================================
-  // Stripe checkout
+  // Checkout — routes to MercadoPago or Stripe based on provider
   // ============================================================
   async function startCheckout() {
     const cfg = SNP.auth.config || {};
     if (!cfg.features || !cfg.features.billingEnabled) {
-      toast('Billing is not configured yet. Stay tuned!');
+      toast(provider === 'mercadopago' ? 'Pagos no configurados todavía' : 'Billing not configured yet');
       return;
     }
     const u = SNP.auth.getUser();
@@ -271,18 +294,33 @@
     }
     const btn = $('#checkoutBtn');
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+
     try {
-      const res = await fetch('/.netlify/functions/create-checkout', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ user_id: u.id, email: u.email, billing })
-      });
-      const j = await res.json();
-      if (j.url) { window.location.href = j.url; }
-      else { throw new Error(j.error || 'Checkout failed'); }
+      if (provider === 'mercadopago') {
+        const res = await fetch('/.netlify/functions/mp-create-preference', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ user_id: u.id, email: u.email, plan: billing })
+        });
+        const j = await res.json();
+        const url = j.init_point || j.sandbox_init_point;
+        if (url) { window.location.href = url; }
+        else { throw new Error(j.error || 'MercadoPago error'); }
+      } else {
+        const res = await fetch('/.netlify/functions/create-checkout', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ user_id: u.id, email: u.email, billing })
+        });
+        const j = await res.json();
+        if (j.url) { window.location.href = j.url; }
+        else { throw new Error(j.error || 'Checkout failed'); }
+      }
     } catch (e) {
       toast('Error: ' + e.message);
-      btn.disabled = false; btn.textContent = 'Go Pro';
+      btn.disabled = false;
+      refreshPriceLabels();
+      $('#checkoutBtn').textContent = provider === 'mercadopago' ? 'Pagar con MercadoPago' : 'Go Pro';
     }
   }
 
@@ -290,9 +328,14 @@
   $('#upgradeBtn').addEventListener('click', startCheckout);
 
   // ============================================================
-  // Stripe customer portal
+  // Manage subscription (MP doesn't have a portal — show info instead)
   // ============================================================
   $('#manageBtn').addEventListener('click', async () => {
+    if (provider === 'mercadopago') {
+      // MP subscriptions are pay-per-period: user simply doesn't renew.
+      toast('Tu Pro se renueva al pagar. Si no querés renovar, no hagas el próximo pago.');
+      return;
+    }
     const u = SNP.auth.getUser();
     if (!u) return;
     const btn = $('#manageBtn');
@@ -311,6 +354,29 @@
       btn.disabled = false;
     }
   });
+
+  // ============================================================
+  // Handle return from MercadoPago redirect
+  // ============================================================
+  (function handleMpReturn() {
+    const params = new URLSearchParams(location.search);
+    const mp = params.get('mp');
+    if (!mp) return;
+    if (mp === 'success') toast('¡Pago aprobado! Activando tu Pro...');
+    else if (mp === 'pending') toast('Pago pendiente. Te avisamos cuando se acredite.');
+    else if (mp === 'failure') toast('No se pudo completar el pago. Probá de nuevo.');
+    // Refresh subscription status in 3s (webhook should have fired)
+    setTimeout(() => {
+      const u = SNP.auth.getUser();
+      if (u) {
+        fetch('/.netlify/functions/mp-status?user_id=' + encodeURIComponent(u.id))
+          .then(r => r.json())
+          .then(j => {
+            if (j.isPro) { localStorage.setItem('snp.isPro', 'true'); window.location.reload(); }
+          });
+      }
+    }, 3000);
+  })();
 
   // ============================================================
   // Sign out
