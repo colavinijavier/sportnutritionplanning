@@ -68,10 +68,22 @@ exports.handler = async (event) => {
     });
     const j = await res.json();
     if (!res.ok) return jsonResp(res.status, { error: (j.message || j.error || 'MercadoPago API error') });
+
+    // Detect test mode from the access token: the productivo app id for
+    // SportNutritionPlanning is 6058049026022185. Any other app id is a
+    // TESTUSER's app (e.g. when MP_ACCESS_TOKEN is set to a test credential).
+    // In that case the productivo init_point won't work for the buyer; only
+    // the sandbox URL handles test users + sandbox cards.
+    const PROD_APP_ID = '6058049026022185';
+    const tokenAppId = (accessToken.split('-')[1]) || '';
+    const isTestMode = tokenAppId !== PROD_APP_ID;
+    const redirectUrl = isTestMode ? (j.sandbox_init_point || j.init_point) : j.init_point;
+
     return jsonResp(200, {
       id: j.id,
-      init_point: j.init_point,
-      sandbox_init_point: j.sandbox_init_point
+      init_point: redirectUrl,
+      sandbox_init_point: j.sandbox_init_point,
+      test_mode: isTestMode
     });
   } catch (e) {
     return jsonResp(500, { error: e.message || 'Unknown error' });
