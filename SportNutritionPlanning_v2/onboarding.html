@@ -783,10 +783,54 @@
       if (!res.ok || out.error) {
         throw new Error(out.error || 'Generation failed');
       }
-      // Save the plan + onboarding data
+      // Save the plan + onboarding data to localStorage (fast path)
       localStorage.setItem('snp.plan', JSON.stringify(out.plan));
       localStorage.setItem('snp.profile', JSON.stringify(data));
       localStorage.removeItem('snp.onb');
+
+      // Persist to Supabase too so the plan follows the user across devices.
+      // Failures here are non-blocking — the user still gets their plan locally.
+      try {
+        if (window.SNP && SNP.auth && SNP.auth.isEnabled && SNP.auth.isEnabled()) {
+          const u = SNP.auth.getUser && SNP.auth.getUser();
+          const client = SNP.auth.getClient && SNP.auth.getClient();
+          if (u && client) {
+            // Mark previous active plans as inactive
+            await client.from('plans').update({ is_active: false }).eq('user_id', u.id).eq('is_active', true);
+            // Insert the new plan
+            await client.from('plans').insert({
+              user_id: u.id,
+              data: out.plan,
+              language: data.lang || 'en',
+              is_active: true
+            });
+            // Upsert profile so it survives device changes
+            await client.from('profiles').upsert({
+              user_id: u.id,
+              full_name: data.name || null,
+              age: data.age || null,
+              sex: data.sex || null,
+              height_cm: data.height || null,
+              weight_kg: data.weight || null,
+              country: data.country || null,
+              city: data.city || null,
+              units: data.units || 'metric',
+              sport: data.sport || null,
+              training_days: data.days || null,
+              intensity: data.intensity || null,
+              timing: data.timing || null,
+              goal: data.goal || null,
+              restrictions: data.restrictions || [],
+              dislikes: data.dislikes || null,
+              household: data.household || 'solo',
+              language: data.lang || 'en'
+            }, { onConflict: 'user_id' });
+          }
+        }
+      } catch (persistErr) {
+        console.warn('[onboarding] Supabase persist failed (non-blocking):', persistErr);
+      }
+
       // Redirect to app
       window.location.href = '/app.html?welcome=1';
     } catch (e) {

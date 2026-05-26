@@ -384,6 +384,55 @@
   try { plan = JSON.parse(localStorage.getItem('snp.plan') || 'null'); } catch(e){}
   try { profile = JSON.parse(localStorage.getItem('snp.profile') || 'null'); } catch(e){}
 
+  // If the local plan is missing (e.g. user is on a fresh device or cleared
+  // cache), try to pull it from Supabase after auth has finished.
+  async function hydrateFromSupabase() {
+    try {
+      if (!window.SNP || !SNP.auth || !SNP.auth.isEnabled || !SNP.auth.isEnabled()) return false;
+      const u = SNP.auth.getUser && SNP.auth.getUser();
+      const client = SNP.auth.getClient && SNP.auth.getClient();
+      if (!u || !client) return false;
+      // Newest active plan
+      const planResp = await client.from('plans')
+        .select('data, language, created_at')
+        .eq('user_id', u.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1).maybeSingle();
+      // Profile
+      const profResp = await client.from('profiles')
+        .select('*')
+        .eq('user_id', u.id)
+        .maybeSingle();
+      let touched = false;
+      if (planResp && planResp.data && planResp.data.data) {
+        localStorage.setItem('snp.plan', JSON.stringify(planResp.data.data));
+        plan = planResp.data.data;
+        touched = true;
+      }
+      if (profResp && profResp.data) {
+        const p = profResp.data;
+        const localProfile = {
+          name: p.full_name || '',
+          age: p.age, sex: p.sex,
+          height: p.height_cm, weight: p.weight_kg,
+          country: p.country, city: p.city, units: p.units,
+          sport: p.sport, days: p.training_days, intensity: p.intensity,
+          timing: p.timing, goal: p.goal,
+          restrictions: p.restrictions || [], dislikes: p.dislikes,
+          household: p.household || 'solo', lang: p.language || 'en'
+        };
+        localStorage.setItem('snp.profile', JSON.stringify(localProfile));
+        profile = localProfile;
+        touched = true;
+      }
+      return touched;
+    } catch (e) {
+      console.warn('[hydrateFromSupabase]', e);
+      return false;
+    }
+  }
+
   // Helper: apply signed-in user's name/avatar and decide where the header link goes.
   function applyAuthUI(user) {
     const headerLink = document.querySelector('.app-user');
@@ -451,8 +500,16 @@
   })();
 
   if (!plan || !profile) {
-    $('#noPlan').classList.remove('hidden');
-    $('#planContent').classList.add('hidden');
+    // Try Supabase before deciding to show "No plan yet". If we find a plan
+    // remotely, reload the page so the full plan-rendering path executes.
+    hydrateFromSupabase().then(function(found) {
+      if (found && (plan && profile)) {
+        window.location.reload();
+      } else {
+        $('#noPlan').classList.remove('hidden');
+        $('#planContent').classList.add('hidden');
+      }
+    });
     return;
   }
   $('#planContent').classList.remove('hidden');
