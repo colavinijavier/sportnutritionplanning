@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5" />
+  <meta name="theme-color" content="#10b981" />
+  <title>My plan — SportNutritionPlanning</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2310b981'/><text x='50' y='66' font-size='58' text-anchor='middle' fill='white' font-family='system-ui' font-weight='800'>S</text></svg>" />
+  <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22SportNutritionPlanning%22%2C%22short_name%22%3A%22SNP%22%2C%22start_url%22%3A%22%2Fapp.html%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23ffffff%22%2C%22theme_color%22%3A%22%2310b981%22%7D" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/css/theme.css" />
+  <style>
+    .tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tab {
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--fg-muted);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      background: none;
+      border-top: none; border-left: none; border-right: none;
+      white-space: nowrap;
+      transition: color .12s;
+    }
+    .tab:hover { color: var(--fg); }
+    .tab.is-active { color: var(--emerald-600); border-bottom-color: var(--emerald-500); }
+    .panel { display: none; }
+    .panel.is-active { display: block; animation: stepIn .25s ease; }
+
+    .day-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px dashed var(--border);
+    }
+    .day-name {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    .day-macros {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: var(--fg-muted);
+    }
+    .day-macros strong { color: var(--fg); }
+    .meal {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--bg-muted);
+    }
+    .meal:last-child { border-bottom: none; }
+    .meal-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .meal-slot {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--orange-600);
+    }
+    .meal-slot.peri { color: var(--emerald-600); }
+    .meal-title {
+      font-weight: 600;
+      font-size: 15.5px;
+      margin: 2px 0;
+    }
+    .meal-macros { font-size: 12.5px; color: var(--fg-muted); }
+    .meal-ingr {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--fg-muted);
+    }
+    .meal-ingr li { padding: 1px 0; }
+    .meal-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .meal-actions button {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .meal-actions button:hover { background: var(--bg-muted); }
+
+    .badge-train {
+      background: var(--emerald-50);
+      color: var(--emerald-700);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .shopping-cat {
+      margin-bottom: 24px;
+    }
+    .shopping-cat h3 {
+      font-size: 15px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--emerald-700);
+      margin-bottom: 8px;
+    }
+    .shop-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .shop-row.is-done {
+      opacity: .5;
+      text-decoration: line-through;
+    }
+    .shop-check {
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .shop-row.is-done .shop-check { background: var(--emerald-500); border-color: var(--emerald-500); }
+    .shop-row.is-done .shop-check::after { content: '✓'; color: white; font-size: 12px; font-weight: 800; }
+    .shop-item { flex: 1; padding: 0 12px; font-size: 14.5px; }
+    .shop-qty { color: var(--fg-muted); font-size: 13px; font-weight: 600; }
+
+    .summary-tile {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      text-align: center;
+    }
+    .summary-tile .num {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--fg);
+      letter-spacing: -.02em;
+      line-height: 1;
+    }
+    .summary-tile .lbl {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--fg-muted);
+      margin-top: 4px;
+    }
+
+    .welcome-banner {
+      background: linear-gradient(135deg, var(--emerald-50) 0%, #f0fdf4 100%);
+      border: 1px solid var(--emerald-300);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .welcome-banner h2 { color: var(--emerald-900); margin-bottom: 8px; }
+    .tips-list {
+      margin-top: 12px;
+      padding-left: 0;
+      list-style: none;
+    }
+    .tips-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 4px 0;
+      font-size: 14px;
+      color: var(--slate-700);
+    }
+    .tips-list li::before { content: '💡'; }
+
+    .pro-gate {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 1px solid #fbbf24;
+      border-radius: var(--radius);
+      padding: 16px;
+      margin: 16px 0;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+    .pro-gate-icon { font-size: 28px; }
+    .pro-gate-text { flex: 1; }
+    .pro-gate-text strong { color: #92400e; }
+    .pro-gate-text p { margin: 2px 0 0; font-size: 13.5px; color: #78350f; }
+
+    .app-header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 0;
+    }
+    .app-header-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .app-user {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 14px;
+      color: var(--fg-muted);
+    }
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--emerald-500), var(--emerald-700));
+      color: white;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .empty-state { text-align: center; padding: 60px 20px; }
+    .empty-state h2 { margin-bottom: 8px; }
+    .empty-state p { color: var(--fg-muted); margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+
+<div class="app-header">
+  <div class="app-header-inner">
+    <a class="brand" href="/">
+      <span class="brand-logo">S</span>
+      SportNutritionPlanning
+    </a>
+    <div class="flex items-center gap-3">
+      <div class="lang-toggle">
+        <button data-lang="en">EN</button>
+        <button data-lang="es">ES</button>
+      </div>
+      <a href="/account.html" class="app-user">
+        <span class="avatar" id="userAvatar">S</span>
+        <span id="userLabel"></span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="container" style="padding-top: 28px; padding-bottom: 80px;">
+
+  <!-- No plan state -->
+  <div id="noPlan" class="empty-state hidden">
+    <h2>No plan yet</h2>
+    <p>Let's build your first weekly plan in 5 minutes.</p>
+    <a href="/onboarding.html" class="btn btn-primary btn-lg">Start onboarding</a>
+  </div>
+
+  <!-- Plan loaded -->
+  <div id="planContent" class="hidden">
+    <div id="welcomeBanner" class="welcome-banner hidden">
+      <h2 id="welcomeText"></h2>
+      <ul class="tips-list" id="tipsList"></ul>
+    </div>
+
+    <!-- Daily targets -->
+    <div class="grid grid-4 mb-6" id="targetTiles"></div>
+
+    <!-- Tabs -->
+    <div class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="today">Today</button>
+      <button class="tab" data-tab="week">Week</button>
+      <button class="tab" data-tab="shopping">Shopping</button>
+      <button class="tab" data-tab="family">Family</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </div>
+
+    <!-- TODAY -->
+    <div class="panel is-active" data-panel="today">
+      <div id="todayContent"></div>
+    </div>
+
+    <!-- WEEK -->
+    <div class="panel" data-panel="week">
+      <div id="weekContent"></div>
+    </div>
+
+    <!-- SHOPPING -->
+    <div class="panel" data-panel="shopping">
+      <div class="flex justify-between items-center mb-4">
+        <h2 style="margin:0;">Shopping list</h2>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary btn-sm" id="copyShopBtn">Copy</button>
+          <button class="btn btn-secondary btn-sm" id="exportShopBtn">Export Excel</button>
+        </div>
+      </div>
+      <div class="pro-gate hidden" id="shopProGate">
+        <div class="pro-gate-icon">⭐</div>
+        <div class="pro-gate-text">
+          <strong>Excel export and supermarket deep-links are a Pro feature.</strong>
+          <p>Upgrade to download a polished spreadsheet and one-click cart-fill on Coto, Carrefour and more.</p>
+        </div>
+        <a href="/account.html?upgrade=1" class="btn btn-warm btn-sm">Upgrade</a>
+      </div>
+      <div id="shoppingContent"></div>
+    </div>
+
+    <!-- FAMILY -->
+    <div class="panel" data-panel="family">
+      <h2>Family group</h2>
+      <div id="familyContent"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="panel" data-panel="settings">
+      <h2>Settings</h2>
+      <div class="card">
+        <h3 style="margin-top:0;">Regenerate your plan</h3>
+        <p class="text-muted">Update your profile or build a new weekly plan from scratch.</p>
+        <div class="flex gap-3 mt-4">
+          <a href="/onboarding.html" class="btn btn-secondary">Edit profile</a>
+          <button class="btn btn-primary" id="regenBtn">Regenerate plan</button>
+        </div>
+      </div>
+      <div class="card mt-4">
+        <h3 style="margin-top:0;">Account</h3>
+        <p class="text-muted">Manage your subscription, family invites and account details.</p>
+        <a href="/account.html" class="btn btn-secondary mt-4">Go to account</a>
+      </div>
+      <div class="card mt-4">
+        <h3 style="margin-top:0;">Danger zone</h3>
+        <p class="text-muted">Clear your locally-stored plan and profile data. This cannot be undone.</p>
+        <button class="btn btn-ghost mt-4" id="clearBtn" style="color:var(--orange-600);">Clear local data</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/assets/js/i18n.js"></script>
+<script src="/assets/js/auth.js"></script>
+<script>
+(async function () {
+  const $  = (s, r) => (r||document).querySelector(s);
+  const $$ = (s, r) => Array.from((r||document).querySelectorAll(s));
+
+  // Initialize auth FIRST so Supabase SDK can process the OAuth callback hash
+  // (#access_token=... that arrives after Google/Magic-link sign-in)
+  try { await SNP.auth.init(); } catch (e) { console.warn('[auth.init]', e); }
+
+  // After Supabase consumes the hash, scrub it from the URL so the user
+  // doesn't see the gigantic token in the address bar nor leak it on copy/share.
+  if (window.location.hash && /access_token=|refresh_token=|error=/.test(window.location.hash)) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
+  const authUser = SNP.auth.isEnabled() ? SNP.auth.getUser() : null;
+
+  // Load plan from localStorage
+  let plan = null, profile = null;
+  try { plan = JSON.parse(localStorage.getItem('snp.plan') || 'null'); } catch(e){}
+  try { profile = JSON.parse(localStorage.getItem('snp.profile') || 'null'); } catch(e){}
+
+  if (!plan || !profile) {
+    // No plan yet — show empty state. If user is signed in, greet them so they
+    // know the session actually landed.
+    $('#noPlan').classList.remove('hidden');
+    $('#planContent').classList.add('hidden');
+    if (authUser) {
+      const display = (authUser.user_metadata && (authUser.user_metadata.full_name || authUser.user_metadata.name)) || authUser.email || '';
+      const initial = display.trim().charAt(0).toUpperCase() || 'S';
+      $('#userAvatar').textContent = initial;
+      $('#userLabel').textContent = display;
+    }
+    return;
+  }
+  $('#planContent').classList.remove('hidden');
+
+  // Avatar + label — prefer the signed-in user (Google/email account) over the
+  // local profile name, since that's the identity the user actually authenticated with.
+  let displayName = profile.name || '';
+  if (authUser) {
+    displayName = (authUser.user_metadata && (authUser.user_metadata.full_name || authUser.user_metadata.name)) || authUser.email || displayName;
+  }
+  const initial = (displayName || 'S').trim().charAt(0).toUpperCase();
+  $('#userAvatar').textContent = initial;
+  $('#userLabel').textContent = displayName;
+
+  // Welcome banner (only show if welcome=1 in URL)
+  if (new URLSearchParams(location.search).get('welcome') === '1' && plan.welcome) {
+    $('#welcomeText').textContent = plan.welcome;
+    const tips = $('#tipsList');
+    (plan.tips || []).forEach(tip => {
+      const li = document.createElement('li');
+      li.textContent = tip;
+      tips.appendChild(li);
+    });
+    $('#welcomeBanner').classList.remove('hidden');
+  }
+
+  // Daily target tiles
+  const t = plan.targets || {};
+  const tiles = [
+    { num: t.kcal || '—', lbl: 'kcal / day' },
+    { num: (t.protein_g || 0) + 'g', lbl: 'protein' },
+    { num: (t.carbs_g || 0) + 'g', lbl: 'carbs' },
+    { num: (t.fat_g || 0) + 'g', lbl: 'fat' }
+  ];
+  $('#targetTiles').innerHTML = tiles.map(x => `
+    <div class="summary-tile">
+      <div class="num">${x.num}</div>
+      <div class="lbl">${x.lbl}</div>
+    </div>
+  `).join('');
+
+  // Tabs
+  $$('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $$('.tab').forEach(t => t.classList.remove('is-active'));
+      $$('.panel').forEach(p => p.classList.remove('is-active'));
+      tab.classList.add('is-active');
+      $('.panel[data-panel="' + tab.dataset.tab + '"]').classList.add('is-active');
+    });
+  });
+
+  // ============================================================
+  // RENDER: Today
+  // ============================================================
+  function getTodayDay() {
+    const days = plan.days || [];
+    if (days.length === 0) return null;
+    // Map JS day to plan day index. Plan starts at Monday.
+    const jsDay = new Date().getDay(); // 0=Sun..6=Sat
+    const idx = (jsDay === 0) ? 6 : jsDay - 1;
+    return days[idx % days.length];
+  }
+
+  function renderMeal(meal) {
+    const isPeri = meal.slot && /(pre|post|peri|workout|training)/i.test(meal.slot);
+    const slotLbl = (meal.slot || '').toUpperCase();
+    const time = meal.time ? `${meal.time} · ` : '';
+    const macros = meal.macros || {};
+    const macroLine = `${macros.kcal||0} kcal · ${macros.protein_g||0}P · ${macros.carbs_g||0}C · ${macros.fat_g||0}F`;
+    const ingr = (meal.ingredients || []).map(i => `<li>${escapeHtml(i)}</li>`).join('');
+    return `
+      <div class="meal">
+        <div class="meal-head">
+          <div>
+            <div class="meal-slot ${isPeri ? 'peri' : ''}">${time}${escapeHtml(slotLbl)}</div>
+            <div class="meal-title">${escapeHtml(meal.title || '')}</div>
+            <div class="meal-macros">${macroLine}</div>
+          </div>
+          <div class="meal-actions">
+            <button data-action="swap" data-slot="${escapeHtml(meal.slot||'')}" title="Swap with AI">↻ Swap</button>
+          </div>
+        </div>
+        ${ingr ? `<ul class="meal-ingr">${ingr}</ul>` : ''}
+        ${meal.notes ? `<div class="text-subtle" style="font-size:12.5px;margin-top:6px;">📝 ${escapeHtml(meal.notes)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function renderDay(day, opts) {
+    opts = opts || {};
+    const meals = (day.meals || []).map(renderMeal).join('');
+    const dm = (day.meals || []).reduce((acc, m) => {
+      const x = m.macros || {};
+      acc.kcal += x.kcal || 0;
+      acc.p += x.protein_g || 0;
+      acc.c += x.carbs_g || 0;
+      acc.f += x.fat_g || 0;
+      return acc;
+    }, { kcal: 0, p: 0, c: 0, f: 0 });
+    const badge = day.is_training_day ? '<span class="badge-train">Training</span>' : '';
+    return `
+      <div class="day-card">
+        <div class="day-header">
+          <div>
+            <div class="day-name">${escapeHtml(day.name || '')}</div>
+            ${badge}
+          </div>
+          <div class="day-macros">
+            <span><strong>${dm.kcal}</strong> kcal</span>
+            <span><strong>${dm.p}g</strong> protein</span>
+            <span><strong>${dm.c}g</strong> carbs</span>
+            <span><strong>${dm.f}g</strong> fat</span>
+          </div>
+        </div>
+        <div class="meals-list">${meals}</div>
+      </div>
+    `;
+  }
+
+  // Today panel
+  const today = getTodayDay();
+  $('#todayContent').innerHTML = today
+    ? renderDay(today)
+    : '<p class="text-muted">No plan for today.</p>';
+
+  // Week panel
+  $('#weekContent').innerHTML = (plan.days || []).map(d => renderDay(d)).join('');
+
+  // ============================================================
+  // RENDER: Shopping
+  // ============================================================
+  function renderShopping() {
+    const list = plan.shopping_list || {};
+    const checks = JSON.parse(localStorage.getItem('snp.shopChecks') || '{}');
+    let html = '';
+    Object.entries(list).forEach(([cat, items]) => {
+      if (!items || !items.length) return;
+      html += `<div class="shopping-cat"><h3>${escapeHtml(cat)}</h3>`;
+      items.forEach((it, i) => {
+        const key = cat + '::' + (it.item || '') + '::' + i;
+        const done = checks[key] ? 'is-done' : '';
+        html += `
+          <div class="shop-row ${done}" data-key="${escapeHtml(key)}">
+            <span class="shop-check"></span>
+            <span class="shop-item">${escapeHtml(it.item || '')}</span>
+            <span class="shop-qty">${escapeHtml(it.quantity || '')}</span>
+          </div>`;
+      });
+      html += '</div>';
+    });
+    $('#shoppingContent').innerHTML = html || '<p class="text-muted">No shopping list available.</p>';
+
+    // Click to mark done
+    $$('.shop-row').forEach(row => {
+      row.addEventListener('click', () => {
+        row.classList.toggle('is-done');
+        const key = row.dataset.key;
+        const checks = JSON.parse(localStorage.getItem('snp.shopChecks') || '{}');
+        if (row.classList.contains('is-done')) checks[key] = 1;
+        else delete checks[key];
+        localStorage.setItem('snp.shopChecks', JSON.stringify(checks));
+      });
+    });
+  }
+  renderShopping();
+
+  // Show pro gate for shopping export
+  const isPro = JSON.parse(localStorage.getItem('snp.isPro') || 'false');
+  if (!isPro) $('#shopProGate').classList.remove('hidden');
+
+  $('#copyShopBtn').addEventListener('click', () => {
+    const list = plan.shopping_list || {};
+    let txt = '';
+    Object.entries(list).forEach(([cat, items]) => {
+      if (!items || !items.length) return;
+      txt += '=== ' + cat + ' ===\n';
+      items.forEach(it => { txt += '- ' + it.item + ' (' + it.quantity + ')\n'; });
+      txt += '\n';
+    });
+    navigator.clipboard.writeText(txt).then(() => toast('Copied to clipboard'));
+  });
+
+  $('#exportShopBtn').addEventListener('click', () => {
+    if (!isPro) {
+      toast(window.SNP.i18n.lang === 'es' ? 'Export Excel es feature Pro' : 'Excel export is a Pro feature');
+      window.location.href = '/account.html?upgrade=1';
+      return;
+    }
+    // TODO: real Excel export for Pro users
+    toast('Pro Excel export coming soon');
+  });
+
+  // ============================================================
+  // FAMILY panel
+  // ============================================================
+  function renderFamily() {
+    const members = (profile.members || []);
+    let html = '';
+    // Primary
+    html += `<div class="card mb-4">
+      <div class="flex justify-between items-center mb-2">
+        <strong>${escapeHtml(profile.name)}</strong>
+        <span class="badge">Primary</span>
+      </div>
+      <div class="text-muted" style="font-size:14px;">
+        ${profile.sex}, ${profile.age}y · ${(plan.targets||{}).kcal||'—'} kcal · ${(plan.targets||{}).protein_g||0}g protein
+      </div>
+    </div>`;
+
+    if (profile.household === 'family' && members.length) {
+      members.forEach(m => {
+        html += `<div class="card mb-3">
+          <div class="flex justify-between items-center mb-2">
+            <strong>${escapeHtml(m.name || '—')}</strong>
+            <span class="text-subtle" style="font-size:13px;">${m.sport ? escapeHtml(m.sport) : 'No sport'}</span>
+          </div>
+          <div class="text-muted" style="font-size:14px;">
+            ${m.sex}, ${m.age}y
+          </div>
+        </div>`;
+      });
+    } else {
+      html += `<div class="card">
+        <p class="text-muted">You're set up as a solo profile. Upgrade to Pro to invite up to 6 family members with linked accounts.</p>
+        <a href="/account.html?upgrade=1" class="btn btn-warm btn-sm mt-2">Upgrade to Pro</a>
+      </div>`;
+    }
+
+    if (profile.household === 'family' && !isPro) {
+      html += `<div class="pro-gate mt-4">
+        <div class="pro-gate-icon">⭐</div>
+        <div class="pro-gate-text">
+          <strong>Link family members as real accounts</strong>
+          <p>With Pro, each family member can sign in to see their own daily plan, mark off their meals, and track their own progress.</p>
+        </div>
+        <a href="/account.html?upgrade=1" class="btn btn-warm btn-sm">Upgrade</a>
+      </div>`;
+    }
+
+    $('#familyContent').innerHTML = html;
+  }
+  renderFamily();
+
+  // ============================================================
+  // Settings / regen
+  // ============================================================
+  $('#clearBtn').addEventListener('click', () => {
+    if (confirm('This will erase your locally-stored plan and profile. Continue?')) {
+      localStorage.removeItem('snp.plan');
+      localStorage.removeItem('snp.profile');
+      localStorage.removeItem('snp.shopChecks');
+      window.location.href = '/onboarding.html';
+    }
+  });
+
+  $('#regenBtn').addEventListener('click', async () => {
+    const lang = window.SNP.i18n.lang;
+    const msg = lang === 'es' ? 'Esto va a generar un plan nuevo. ¿Seguir?' : 'This will generate a new plan. Continue?';
+    if (!confirm(msg)) return;
+    const btn = $('#regenBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> ' + (lang === 'es' ? 'Generando...' : 'Generating...');
+    try {
+      const res = await fetch('/.netlify/functions/generate-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...profile, lang })
+      });
+      const out = await res.json();
+      if (!res.ok || out.error) throw new Error(out.error || 'failed');
+      localStorage.setItem('snp.plan', JSON.stringify(out.plan));
+      window.location.href = '/app.html?welcome=1';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Regenerate plan';
+      toast('Error: ' + (e.message || 'unknown'));
+    }
+  });
+
+  // ============================================================
+  // Meal swap (delegated)
+  // ============================================================
+  document.body.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-action="swap"]');
+    if (!btn) return;
+    const lang = window.SNP.i18n.lang;
+    const slot = btn.dataset.slot;
+    btn.disabled = true;
+    btn.innerHTML = '...';
+    try {
+      const sys = lang === 'es'
+        ? 'Sos un nutricionista deportivo. Generás una alternativa de comida en JSON puro.'
+        : 'You are a sports nutritionist. Generate an alternative meal in pure JSON.';
+      const prompt = (lang === 'es' ? 'Necesito una alternativa de ' : 'I need an alternative ') + slot +
+        '. ' + JSON.stringify({ profile: { sex: profile.sex, age: profile.age, sport: profile.sport, restrictions: profile.restrictions }, lang }) +
+        '. Devolvé SOLO JSON con esta forma: {"title":"...","ingredients":["..."],"macros":{"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0},"notes":"..."}';
+      const res = await fetch('/.netlify/functions/ai', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt, system: sys, maxTokens: 600 })
+      });
+      const out = await res.json();
+      if (out.text) {
+        toast(lang === 'es' ? 'Sugerencia: ' + (JSON.parse(out.text).title || '—') : 'Suggestion: ' + (JSON.parse(out.text).title || '—'));
+      }
+    } catch (err) {
+      toast('Error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '↻ Swap';
+    }
+  });
+
+  // ============================================================
+  // Toast helper
+  // ============================================================
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('is-visible');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('is-visible'), 2000);
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+})();
+</script>
+</body>
+</html>
