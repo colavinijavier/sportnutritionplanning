@@ -373,51 +373,84 @@
 <script src="/assets/js/i18n.js"></script>
 <script src="/assets/js/auth.js"></script>
 <script>
-(async function () {
+(function () {
   const $  = (s, r) => (r||document).querySelector(s);
   const $$ = (s, r) => Array.from((r||document).querySelectorAll(s));
 
-  // Initialize auth FIRST so Supabase SDK can process the OAuth callback hash
-  // (#access_token=... that arrives after Google/Magic-link sign-in)
-  try { await SNP.auth.init(); } catch (e) { console.warn('[auth.init]', e); }
-
-  // After Supabase consumes the hash, scrub it from the URL so the user
-  // doesn't see the gigantic token in the address bar nor leak it on copy/share.
-  if (window.location.hash && /access_token=|refresh_token=|error=/.test(window.location.hash)) {
-    history.replaceState(null, '', window.location.pathname + window.location.search);
-  }
-
-  const authUser = SNP.auth.isEnabled() ? SNP.auth.getUser() : null;
-
-  // Load plan from localStorage
+  // ---------------------------------------------------------------------------
+  // Render the page synchronously from localStorage FIRST. This guarantees the
+  // user always sees a usable UI even if Supabase SDK fails to load, hangs, or
+  // the network is flaky. Auth-driven personalisation (avatar, greeting) runs
+  // async afterwards and just enriches the already-rendered page.
+  // ---------------------------------------------------------------------------
   let plan = null, profile = null;
   try { plan = JSON.parse(localStorage.getItem('snp.plan') || 'null'); } catch(e){}
   try { profile = JSON.parse(localStorage.getItem('snp.profile') || 'null'); } catch(e){}
 
+  // Helper: apply the signed-in user's name/avatar everywhere it appears,
+  // and decide where the header avatar link should point.
+  function applyAuthUI(user) {
+    const headerLink = document.querySelector('.app-user');
+    if (!user) {
+      // Not signed in — header avatar should offer to sign in, not go to /account
+      if (headerLink) headerLink.href = '/login.html';
+      return;
+    }
+    const display = (user.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || user.email || '';
+    const initial = (display || 'S').trim().charAt(0).toUpperCase() || 'S';
+    const avatarEl = $('#userAvatar'); if (avatarEl) avatarEl.textContent = initial;
+    const labelEl  = $('#userLabel');  if (labelEl)  labelEl.textContent = display;
+    if (headerLink) headerLink.href = '/account.html';
+
+    // If we're sitting on the empty state, warm it up with a personalised greeting.
+    const noPlan = $('#noPlan');
+    if (noPlan && !noPlan.classList.contains('hidden')) {
+      const lang = (window.SNP && SNP.i18n && SNP.i18n.lang) || 'en';
+      const first = (display.split(' ')[0] || '').trim();
+      const h2 = noPlan.querySelector('h2');
+      const p  = noPlan.querySelector('p');
+      if (h2) h2.textContent = first
+        ? (lang === 'es' ? `Hola, ${first}` : `Hi, ${first}`)
+        : (lang === 'es' ? 'Bienvenido' : 'Welcome');
+      if (p)  p.textContent  = lang === 'es' ? 'Armemos tu primer plan semanal en 5 minutos.' : "Let's build your first weekly plan in 5 minutes.";
+    }
+  }
+
+  // Kick off auth init in the background — it must not block the initial UI.
+  (async function authBootstrap() {
+    try {
+      if (window.SNP && SNP.auth && SNP.auth.init) {
+        await SNP.auth.init();
+        // Scrub OAuth callback hash from the URL once the SDK has consumed it.
+        if (window.location.hash && /access_token=|refresh_token=|error=/.test(window.location.hash)) {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        const u = SNP.auth.getUser && SNP.auth.getUser();
+        applyAuthUI(u);
+        // Stay reactive to sign-in / sign-out across tabs.
+        if (SNP.auth.onChange) SNP.auth.onChange(applyAuthUI);
+      } else {
+        applyAuthUI(null);
+      }
+    } catch (e) {
+      console.warn('[auth.bootstrap]', e);
+      applyAuthUI(null);
+    }
+  })();
+
+  // Synchronous render below — runs regardless of auth state.
   if (!plan || !profile) {
-    // No plan yet — show empty state. If user is signed in, greet them so they
-    // know the session actually landed.
     $('#noPlan').classList.remove('hidden');
     $('#planContent').classList.add('hidden');
-    if (authUser) {
-      const display = (authUser.user_metadata && (authUser.user_metadata.full_name || authUser.user_metadata.name)) || authUser.email || '';
-      const initial = display.trim().charAt(0).toUpperCase() || 'S';
-      $('#userAvatar').textContent = initial;
-      $('#userLabel').textContent = display;
-    }
     return;
   }
   $('#planContent').classList.remove('hidden');
 
-  // Avatar + label — prefer the signed-in user (Google/email account) over the
-  // local profile name, since that's the identity the user actually authenticated with.
-  let displayName = profile.name || '';
-  if (authUser) {
-    displayName = (authUser.user_metadata && (authUser.user_metadata.full_name || authUser.user_metadata.name)) || authUser.email || displayName;
-  }
-  const initial = (displayName || 'S').trim().charAt(0).toUpperCase();
+  // Avatar + label fallback from local profile (will be overridden by applyAuthUI
+  // once auth bootstraps).
+  const initial = (profile.name || 'S').trim().charAt(0).toUpperCase();
   $('#userAvatar').textContent = initial;
-  $('#userLabel').textContent = displayName;
+  $('#userLabel').textContent = profile.name || '';
 
   // Welcome banner (only show if welcome=1 in URL)
   if (new URLSearchParams(location.search).get('welcome') === '1' && plan.welcome) {
@@ -662,40 +695,4 @@
 
   $('#regenBtn').addEventListener('click', async () => {
     const lang = window.SNP.i18n.lang;
-    const msg = lang === 'es' ? 'Esto va a generar un plan nuevo. ¿Seguir?' : 'This will generate a new plan. Continue?';
-    if (!confirm(msg)) return;
-    const btn = $('#regenBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> ' + (lang === 'es' ? 'Generando...' : 'Generating...');
-    try {
-      const res = await fetch('/.netlify/functions/generate-plan', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...profile, lang })
-      });
-      const out = await res.json();
-      if (!res.ok || out.error) throw new Error(out.error || 'failed');
-      localStorage.setItem('snp.plan', JSON.stringify(out.plan));
-      window.location.href = '/app.html?welcome=1';
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = 'Regenerate plan';
-      toast('Error: ' + (e.message || 'unknown'));
-    }
-  });
-
-  // ============================================================
-  // Meal swap (delegated)
-  // ============================================================
-  document.body.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-action="swap"]');
-    if (!btn) return;
-    const lang = window.SNP.i18n.lang;
-    const slot = btn.dataset.slot;
-    btn.disabled = true;
-    btn.innerHTML = '...';
-    try {
-      const sys = lang === 'es'
-        ? 'Sos un nutricionista deportivo. Generás una alternativa de comida en JSON puro.'
-        : 'You are a sports nutritionist. Generate an alternative meal in pure JSON.';
-      const prompt = (lang === 'es' ? 'Ne
+    const msg = lang === 'es' ? 'Esto va a generar un plan nuevo. ¿Seguir?' : 
