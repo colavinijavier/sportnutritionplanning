@@ -11,49 +11,73 @@ exports.handler = async (event) => {
   const mpToken = process.env.MP_ACCESS_TOKEN;
   const supaUrl = process.env.SUPABASE_URL;
   const supaService = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!mpToken) return { statusCode: 500, body: 'MP_ACCESS_TOKEN missing' };
-  if (!supaUrl || !supaService) return { statusCode: 500, body: 'Supabase env missing' };
 
-  // MP sends notifications as POST with body, or as GET with query params.
-  // The most reliable payload field is `data.id` (payment id) and `type` ("payment").
+  console.log('[mp-webhook] received', {
+    method: event.httpMethod,
+    qs: event.queryStringParameters,
+    bodyLen: (event.body || '').length
+  });
+
+  if (!mpToken) {
+    console.log('[mp-webhook] ERROR: MP_ACCESS_TOKEN missing');
+    return { statusCode: 500, body: 'MP_ACCESS_TOKEN missing' };
+  }
+  if (!supaUrl || !supaService) {
+    console.log('[mp-webhook] ERROR: Supabase env missing');
+    return { statusCode: 500, body: 'Supabase env missing' };
+  }
+
   let payload = {};
   try {
     if (event.body) payload = JSON.parse(event.body);
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    console.log('[mp-webhook] body parse failed (might be empty or query-only)');
+  }
   const qs = event.queryStringParameters || {};
 
-  // MP sends three kinds of notifications: payment, merchant_order, etc. We only care about payment.
   const type = payload.type || payload.topic || qs.type || qs.topic;
   const dataId = (payload.data && payload.data.id) || qs.id || qs['data.id'];
 
+  console.log('[mp-webhook] parsed', { type, dataId });
+
   if (!type || type !== 'payment' || !dataId) {
+    console.log('[mp-webhook] ignored: not a payment notification or missing id');
     return { statusCode: 200, body: 'ignored' };
   }
 
   try {
-    // Fetch the payment details to validate authenticity
+    console.log('[mp-webhook] fetching payment from MP API:', dataId);
     const r = await fetch('https://api.mercadopago.com/v1/payments/' + dataId, {
       headers: { 'Authorization': 'Bearer ' + mpToken }
     });
-    if (!r.ok) return { statusCode: 200, body: 'payment lookup failed' };
+    if (!r.ok) {
+      console.log('[mp-webhook] MP API lookup failed:', r.status, await r.text());
+      return { statusCode: 200, body: 'payment lookup failed' };
+    }
     const payment = await r.json();
+    console.log('[mp-webhook] payment fetched:', {
+      id: payment.id,
+      status: payment.status,
+      external_reference: payment.external_reference,
+      amount: payment.transaction_amount
+    });
 
-    // Extract user_id and plan from external_reference: "uuid|monthly" or "uuid|yearly"
     const ext = String(payment.external_reference || '');
     const sep = ext.indexOf('|');
     const userId = sep > 0 ? ext.slice(0, sep) : ext;
     const plan = sep > 0 ? ext.slice(sep + 1) : 'monthly';
-    if (!userId) return { statusCode: 200, body: 'no user_id in external_reference' };
+    if (!userId) {
+      console.log('[mp-webhook] no user_id in external_reference, ignoring');
+      return { statusCode: 200, body: 'no user_id in external_reference' };
+    }
 
-    // Map MP payment status to our subscription status
-    const mpStatus = String(payment.status || ''); // approved, pending, authorized, in_process, rejected, refunded, cancelled, charged_back
+    const mpStatus = String(payment.status || '');
     let subStatus = 'inactive';
     if (mpStatus === 'approved' || mpStatus === 'authorized') subStatus = 'active';
     else if (mpStatus === 'pending' || mpStatus === 'in_process') subStatus = 'pending';
     else if (mpStatus === 'rejected' || mpStatus === 'cancelled') subStatus = 'canceled';
     else if (mpStatus === 'refunded' || mpStatus === 'charged_back') subStatus = 'refunded';
 
-    // Compute renewal date: monthly = +30d, yearly = +365d (only for active)
     let renewAt = null;
     if (subStatus === 'active') {
       const days = plan === 'yearly' ? 365 : 30;
@@ -61,7 +85,7 @@ exports.handler = async (event) => {
       renewAt = new Date(paidAt.getTime() + days * 24 * 3600 * 1000).toISOString();
     }
 
-    await upsertSub(supaUrl, supaService, {
+    const row = {
       user_id: userId,
       stripe_customer_id: payment.payer && payment.payer.id ? String(payment.payer.id) : null,
       stripe_subscription_id: String(payment.id || ''),
@@ -69,23 +93,29 @@ exports.handler = async (event) => {
       price_id: plan,
       current_period_end: renewAt,
       cancel_at_period_end: false
+    };
+
+    console.log('[mp-webhook] upserting subscription row:', row);
+    const upRes = await fetch(supaUrl + '/rest/v1/subscriptions?on_conflict=user_id', {
+      method: 'POST',
+      headers: {
+        'apikey': supaService,
+        'Authorization': 'Bearer ' + supaService,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify(row)
     });
+    if (!upRes.ok) {
+      const errText = await upRes.text();
+      console.log('[mp-webhook] UPSERT FAILED:', upRes.status, errText);
+      return { statusCode: 200, body: 'upsert failed: ' + errText.slice(0, 200) };
+    }
+    console.log('[mp-webhook] upsert OK, user', userId, '-> status', subStatus);
 
     return { statusCode: 200, body: 'ok' };
   } catch (e) {
+    console.log('[mp-webhook] handler error:', e.message);
     return { statusCode: 500, body: 'handler error: ' + (e.message || e) };
   }
 };
-
-async function upsertSub(supaUrl, supaKey, row) {
-  await fetch(supaUrl + '/rest/v1/subscriptions?on_conflict=user_id', {
-    method: 'POST',
-    headers: {
-      'apikey': supaKey,
-      'Authorization': 'Bearer ' + supaKey,
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates,return=minimal'
-    },
-    body: JSON.stringify(row)
-  });
-}
