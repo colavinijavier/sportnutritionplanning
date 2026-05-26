@@ -377,22 +377,17 @@
   const $  = (s, r) => (r||document).querySelector(s);
   const $$ = (s, r) => Array.from((r||document).querySelectorAll(s));
 
-  // ---------------------------------------------------------------------------
   // Render the page synchronously from localStorage FIRST. This guarantees the
-  // user always sees a usable UI even if Supabase SDK fails to load, hangs, or
-  // the network is flaky. Auth-driven personalisation (avatar, greeting) runs
-  // async afterwards and just enriches the already-rendered page.
-  // ---------------------------------------------------------------------------
+  // user always sees a usable UI even if Supabase SDK fails to load or hangs.
+  // Auth-driven personalisation (avatar, greeting) runs async afterwards.
   let plan = null, profile = null;
   try { plan = JSON.parse(localStorage.getItem('snp.plan') || 'null'); } catch(e){}
   try { profile = JSON.parse(localStorage.getItem('snp.profile') || 'null'); } catch(e){}
 
-  // Helper: apply the signed-in user's name/avatar everywhere it appears,
-  // and decide where the header avatar link should point.
+  // Helper: apply signed-in user's name/avatar and decide where the header link goes.
   function applyAuthUI(user) {
     const headerLink = document.querySelector('.app-user');
     if (!user) {
-      // Not signed in — header avatar should offer to sign in, not go to /account
       if (headerLink) headerLink.href = '/login.html';
       return;
     }
@@ -401,33 +396,28 @@
     const avatarEl = $('#userAvatar'); if (avatarEl) avatarEl.textContent = initial;
     const labelEl  = $('#userLabel');  if (labelEl)  labelEl.textContent = display;
     if (headerLink) headerLink.href = '/account.html';
-
-    // If we're sitting on the empty state, warm it up with a personalised greeting.
+    // Personalised greeting on the empty state.
     const noPlan = $('#noPlan');
     if (noPlan && !noPlan.classList.contains('hidden')) {
       const lang = (window.SNP && SNP.i18n && SNP.i18n.lang) || 'en';
       const first = (display.split(' ')[0] || '').trim();
       const h2 = noPlan.querySelector('h2');
       const p  = noPlan.querySelector('p');
-      if (h2) h2.textContent = first
-        ? (lang === 'es' ? `Hola, ${first}` : `Hi, ${first}`)
-        : (lang === 'es' ? 'Bienvenido' : 'Welcome');
+      if (h2) h2.textContent = first ? (lang === 'es' ? 'Hola, ' + first : 'Hi, ' + first) : (lang === 'es' ? 'Bienvenido' : 'Welcome');
       if (p)  p.textContent  = lang === 'es' ? 'Armemos tu primer plan semanal en 5 minutos.' : "Let's build your first weekly plan in 5 minutes.";
     }
   }
 
-  // Kick off auth init in the background — it must not block the initial UI.
+  // Kick off auth init in the background — must not block initial UI.
   (async function authBootstrap() {
     try {
       if (window.SNP && SNP.auth && SNP.auth.init) {
         await SNP.auth.init();
-        // Scrub OAuth callback hash from the URL once the SDK has consumed it.
         if (window.location.hash && /access_token=|refresh_token=|error=/.test(window.location.hash)) {
           history.replaceState(null, '', window.location.pathname + window.location.search);
         }
         const u = SNP.auth.getUser && SNP.auth.getUser();
         applyAuthUI(u);
-        // Stay reactive to sign-in / sign-out across tabs.
         if (SNP.auth.onChange) SNP.auth.onChange(applyAuthUI);
       } else {
         applyAuthUI(null);
@@ -438,7 +428,6 @@
     }
   })();
 
-  // Synchronous render below — runs regardless of auth state.
   if (!plan || !profile) {
     $('#noPlan').classList.remove('hidden');
     $('#planContent').classList.add('hidden');
@@ -446,8 +435,7 @@
   }
   $('#planContent').classList.remove('hidden');
 
-  // Avatar + label fallback from local profile (will be overridden by applyAuthUI
-  // once auth bootstraps).
+  // Avatar + label fallback from local profile (overridden by applyAuthUI later).
   const initial = (profile.name || 'S').trim().charAt(0).toUpperCase();
   $('#userAvatar').textContent = initial;
   $('#userLabel').textContent = profile.name || '';
@@ -695,4 +683,76 @@
 
   $('#regenBtn').addEventListener('click', async () => {
     const lang = window.SNP.i18n.lang;
-    const msg = lang === 'es' ? 'Esto va a generar un plan nuevo. ¿Seguir?' : 
+    const msg = lang === 'es' ? 'Esto va a generar un plan nuevo. ¿Seguir?' : 'This will generate a new plan. Continue?';
+    if (!confirm(msg)) return;
+    const btn = $('#regenBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> ' + (lang === 'es' ? 'Generando...' : 'Generating...');
+    try {
+      const res = await fetch('/.netlify/functions/generate-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...profile, lang })
+      });
+      const out = await res.json();
+      if (!res.ok || out.error) throw new Error(out.error || 'failed');
+      localStorage.setItem('snp.plan', JSON.stringify(out.plan));
+      window.location.href = '/app.html?welcome=1';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Regenerate plan';
+      toast('Error: ' + (e.message || 'unknown'));
+    }
+  });
+
+  // ============================================================
+  // Meal swap (delegated)
+  // ============================================================
+  document.body.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-action="swap"]');
+    if (!btn) return;
+    const lang = window.SNP.i18n.lang;
+    const slot = btn.dataset.slot;
+    btn.disabled = true;
+    btn.innerHTML = '...';
+    try {
+      const sys = lang === 'es'
+        ? 'Sos un nutricionista deportivo. Generás una alternativa de comida en JSON puro.'
+        : 'You are a sports nutritionist. Generate an alternative meal in pure JSON.';
+      const prompt = (lang === 'es' ? 'Necesito una alternativa de ' : 'I need an alternative ') + slot +
+        '. ' + JSON.stringify({ profile: { sex: profile.sex, age: profile.age, sport: profile.sport, restrictions: profile.restrictions }, lang }) +
+        '. Devolvé SOLO JSON con esta forma: {"title":"...","ingredients":["..."],"macros":{"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0},"notes":"..."}';
+      const res = await fetch('/.netlify/functions/ai', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt, system: sys, maxTokens: 600 })
+      });
+      const out = await res.json();
+      if (out.text) {
+        toast(lang === 'es' ? 'Sugerencia: ' + (JSON.parse(out.text).title || '—') : 'Suggestion: ' + (JSON.parse(out.text).title || '—'));
+      }
+    } catch (err) {
+      toast('Error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '↻ Swap';
+    }
+  });
+
+  // ============================================================
+  // Toast helper
+  // ============================================================
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('is-visible');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('is-visible'), 2000);
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+})();
+</script>
+</body>
+</html>
