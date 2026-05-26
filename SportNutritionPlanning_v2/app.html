@@ -393,7 +393,29 @@
     }
     const display = (user.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || user.email || '';
     const initial = (display || 'S').trim().charAt(0).toUpperCase() || 'S';
-    const avatarEl = $('#userAvatar'); if (avatarEl) avatarEl.textContent = initial;
+    const photoUrl = user.user_metadata && (user.user_metadata.avatar_url || user.user_metadata.picture);
+    const avatarEl = $('#userAvatar');
+    if (avatarEl) {
+      if (photoUrl) {
+        // Show the Google profile photo. Use background-image on the existing
+        // .avatar span so we keep the circular shape and dimensions. Fall back
+        // to the text initial if the photo fails to load (CORS, offline, etc.).
+        avatarEl.textContent = '';
+        avatarEl.style.backgroundImage = "url('" + photoUrl + "')";
+        avatarEl.style.backgroundSize = 'cover';
+        avatarEl.style.backgroundPosition = 'center';
+        avatarEl.style.backgroundColor = 'var(--bg-muted)';
+        const probe = new Image();
+        probe.onerror = function () {
+          avatarEl.style.backgroundImage = '';
+          avatarEl.textContent = initial;
+        };
+        probe.src = photoUrl;
+      } else {
+        avatarEl.style.backgroundImage = '';
+        avatarEl.textContent = initial;
+      }
+    }
     const labelEl  = $('#userLabel');  if (labelEl)  labelEl.textContent = display;
     if (headerLink) headerLink.href = '/account.html';
     // Personalised greeting on the empty state.
