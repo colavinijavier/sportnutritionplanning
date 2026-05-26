@@ -49,7 +49,7 @@ exports.handler = async (event) => {
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
+        max_tokens: 6500,
         system: lang === 'es'
           ? 'Sos un nutricionista deportivo experto. Respondes SOLO con JSON compacto valido (sin markdown). CRITICO: cada dia debe sumar EXACTAMENTE el target kcal (margen +/- 3%) y respetar carbs/proteina/grasa target. Usa las allocaciones explicitas por tipo de dia.'
           : 'You are an expert sports nutritionist. Respond ONLY with compact valid JSON (no markdown). CRITICAL: each day must sum to EXACTLY the daily kcal target (within +/-3%) and respect carb/protein/fat targets. Use the explicit per-meal allocations.',
@@ -66,14 +66,39 @@ exports.handler = async (event) => {
 
     const data = await claudeRes.json();
     let text = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text.trim() : '';
+    const stopReason = (data && data.stop_reason) || 'unknown';
     if (text.startsWith('```')) {
       text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim();
     }
 
-    let plan;
-    try { plan = JSON.parse(text); }
-    catch (e) {
-      return jsonResp(500, { error: 'Claude returned invalid JSON', raw: text.slice(0, 400) });
+    // Robust JSON extraction: tolerate prefix/suffix prose around the JSON object.
+    function tryParseJson(s) {
+      try { return JSON.parse(s); } catch (e) { return null; }
+    }
+    let plan = tryParseJson(text);
+    if (!plan) {
+      // Slice from first '{' to the last '}' that balances braces.
+      const first = text.indexOf('{');
+      if (first >= 0) {
+        let depth = 0, end = -1, inStr = false, esc = false;
+        for (let i = first; i < text.length; i++) {
+          const ch = text[i];
+          if (esc) { esc = false; continue; }
+          if (ch === '\\') { esc = true; continue; }
+          if (ch === '"') { inStr = !inStr; continue; }
+          if (inStr) continue;
+          if (ch === '{') depth++;
+          else if (ch === '}') { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end > first) plan = tryParseJson(text.slice(first, end + 1));
+      }
+    }
+    if (!plan) {
+      console.error('[generate-plan] JSON parse failed. stop_reason=' + stopReason + ' len=' + text.length + ' tail=' + text.slice(-200));
+      const friendly = stopReason === 'max_tokens'
+        ? 'El plan generado fue demasiado largo. Probá con menos miembros familiares o reintentá.'
+        : 'No pudimos generar el plan. Reintentá en un momento.';
+      return jsonResp(500, { error: friendly, stop_reason: stopReason, raw: text.slice(0, 400) });
     }
 
     const validation = validatePlan(plan, primary);
