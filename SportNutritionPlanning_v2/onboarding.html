@@ -444,8 +444,16 @@
 <div class="toast" id="toast"></div>
 
 <script src="/assets/js/i18n.js"></script>
+<script src="/assets/js/auth.js"></script>
 <script>
-(function () {
+(async function () {
+  // Initialize auth so Supabase SDK processes any OAuth/magic-link hash that
+  // may have landed here (e.g. signup confirmation redirect).
+  try { await SNP.auth.init(); } catch (e) { console.warn('[auth.init]', e); }
+  if (window.location.hash && /access_token=|refresh_token=|error=/.test(window.location.hash)) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
   const TOTAL = 5;
   let step = 1;
   const data = {
@@ -456,6 +464,14 @@
     household: 'solo', members: [],
     lang: (window.SNP && window.SNP.i18n) ? window.SNP.i18n.lang : 'en'
   };
+
+  // Prefill name from the authenticated user (Google account) if no saved progress.
+  try {
+    const u = SNP.auth.isEnabled() ? SNP.auth.getUser() : null;
+    if (u && !data.name) {
+      data.name = (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name)) || '';
+    }
+  } catch(e){}
 
   // Load saved progress (if user came back)
   try {

@@ -371,10 +371,23 @@
 <div class="toast" id="toast"></div>
 
 <script src="/assets/js/i18n.js"></script>
+<script src="/assets/js/auth.js"></script>
 <script>
-(function () {
+(async function () {
   const $  = (s, r) => (r||document).querySelector(s);
   const $$ = (s, r) => Array.from((r||document).querySelectorAll(s));
+
+  // Initialize auth FIRST so Supabase SDK can process the OAuth callback hash
+  // (#access_token=... that arrives after Google/Magic-link sign-in)
+  try { await SNP.auth.init(); } catch (e) { console.warn('[auth.init]', e); }
+
+  // After Supabase consumes the hash, scrub it from the URL so the user
+  // doesn't see the gigantic token in the address bar nor leak it on copy/share.
+  if (window.location.hash && /access_token=|refresh_token=|error=/.test(window.location.hash)) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
+  const authUser = SNP.auth.isEnabled() ? SNP.auth.getUser() : null;
 
   // Load plan from localStorage
   let plan = null, profile = null;
@@ -382,16 +395,29 @@
   try { profile = JSON.parse(localStorage.getItem('snp.profile') || 'null'); } catch(e){}
 
   if (!plan || !profile) {
+    // No plan yet — show empty state. If user is signed in, greet them so they
+    // know the session actually landed.
     $('#noPlan').classList.remove('hidden');
     $('#planContent').classList.add('hidden');
+    if (authUser) {
+      const display = (authUser.user_metadata && (authUser.user_metadata.full_name || authUser.user_metadata.name)) || authUser.email || '';
+      const initial = display.trim().charAt(0).toUpperCase() || 'S';
+      $('#userAvatar').textContent = initial;
+      $('#userLabel').textContent = display;
+    }
     return;
   }
   $('#planContent').classList.remove('hidden');
 
-  // Avatar + label
-  const initial = (profile.name || 'S').trim().charAt(0).toUpperCase();
+  // Avatar + label — prefer the signed-in user (Google/email account) over the
+  // local profile name, since that's the identity the user actually authenticated with.
+  let displayName = profile.name || '';
+  if (authUser) {
+    displayName = (authUser.user_metadata && (authUser.user_metadata.full_name || authUser.user_metadata.name)) || authUser.email || displayName;
+  }
+  const initial = (displayName || 'S').trim().charAt(0).toUpperCase();
   $('#userAvatar').textContent = initial;
-  $('#userLabel').textContent = profile.name || '';
+  $('#userLabel').textContent = displayName;
 
   // Welcome banner (only show if welcome=1 in URL)
   if (new URLSearchParams(location.search).get('welcome') === '1' && plan.welcome) {
@@ -672,40 +698,4 @@
       const sys = lang === 'es'
         ? 'Sos un nutricionista deportivo. Generás una alternativa de comida en JSON puro.'
         : 'You are a sports nutritionist. Generate an alternative meal in pure JSON.';
-      const prompt = (lang === 'es' ? 'Necesito una alternativa de ' : 'I need an alternative ') + slot +
-        '. ' + JSON.stringify({ profile: { sex: profile.sex, age: profile.age, sport: profile.sport, restrictions: profile.restrictions }, lang }) +
-        '. Devolvé SOLO JSON con esta forma: {"title":"...","ingredients":["..."],"macros":{"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0},"notes":"..."}';
-      const res = await fetch('/.netlify/functions/ai', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, system: sys, maxTokens: 600 })
-      });
-      const out = await res.json();
-      if (out.text) {
-        toast(lang === 'es' ? 'Sugerencia: ' + (JSON.parse(out.text).title || '—') : 'Suggestion: ' + (JSON.parse(out.text).title || '—'));
-      }
-    } catch (err) {
-      toast('Error');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '↻ Swap';
-    }
-  });
-
-  // ============================================================
-  // Toast helper
-  // ============================================================
-  function toast(msg) {
-    const t = $('#toast');
-    t.textContent = msg;
-    t.classList.add('is-visible');
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => t.classList.remove('is-visible'), 2000);
-  }
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  }
-})();
-</script>
-</body>
-</html>
+      const prompt = (lang === 'es' ? 'Ne
